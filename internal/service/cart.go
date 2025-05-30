@@ -1,6 +1,8 @@
 package service
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+)
 
 type Cart interface {
 	GetAllProductsAvailable(ctx *gin.Context)
@@ -11,7 +13,8 @@ type Cart interface {
 	DecreaseProductCart(ctx *gin.Context)
 }
 
-type cartService struct{}
+type cartService struct {
+}
 
 func NewCartService() Cart {
 	return &cartService{}
