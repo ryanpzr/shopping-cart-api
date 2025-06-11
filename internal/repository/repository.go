@@ -3,11 +3,12 @@ package repository
 import (
 	"database/sql"
 
-	"github.com/ryanpzr/shopping-cart-api/model"
+	"github.com/ryanpzr/shopping-cart-api/internal/model"
 )
 
 type Repository interface {
 	GetAllProduct() ([]model.Product, error)
+	Post(product model.Product) (model.Product, error)
 }
 
 type repository struct {
@@ -35,4 +36,14 @@ func (r *repository) GetAllProduct() ([]model.Product, error) {
 	}
 
 	return products, nil
+}
+
+func (r *repository) Post(product model.Product) (model.Product, error) {
+	query := "INSERT INTO produto (foto, titulo, descricao, preco, quantidade) VALUES ($1, $2, $3, $4, $5)"
+	_, err := r.db.Exec(query, product.Foto, product.Titulo, product.Descricao, product.Preco, product.Quantidade)
+	if err != nil {
+		return model.Product{}, err
+	}
+
+	return product, nil
 }
