@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16
+    container_name: database_sc
+    restart: always
+    environment:
+      POSTGRES_DB: shopping_cart
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 12345
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./
+    container_name: backend_sc
+    restart: always
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: root
+      DB_PASSWORD: 12345
+      DB_NAME: shopping_cart
+      DB_SSLMODE: disable
+    ports:
+      - '8080:8080'
+    depends_on:
+      - db
+volumes:
+  postgres_data:
+    driver: local

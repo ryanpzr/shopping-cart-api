@@ -12,7 +12,7 @@ import (
 
 func main() {
 	r := gin.Default()
-	api := r.Group("/api")
+	api := r.Group("/api/v1")
 
 	// cartService := service.NewCartService()
 	// client := router.NewClient(cartService)

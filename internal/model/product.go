@@ -1,19 +1,18 @@
 package model
 
 type Product struct {
-	Id         int
-	Foto       string
-	Titulo     string
-	Descricao  string
-	Preco      float64
-	Quantidade int
+	Id          int
+	Photo       string
+	Title       string
+	Description string
+	Price       float64
+	Quantity    int
 }
 
 type ProductDTO struct {
-	Id         int     `json:"id"`
-	Foto       string  `json:"foto"`
-	Titulo     string  `json:"titulo"`
-	Descricao  string  `json:"descricao"`
-	Preco      float64 `json:"preco"`
-	Quantidade int     `json:"quantidade"`
+	Photo       *string  `json:"photo"`
+	Title       *string  `json:"title"`
+	Description *string  `json:"description"`
+	Price       *float64 `json:"price"`
+	Quantity    *int     `json:"quantity"`
 }

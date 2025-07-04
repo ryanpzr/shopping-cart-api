@@ -3,10 +3,8 @@ package config
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
@@ -18,11 +16,6 @@ func NewDb() *Db {
 }
 
 func (d *Db) OpenConn() (*sql.DB, error) {
-	err := godotenv.Load("../.env")
-	if err != nil {
-		log.Fatal("Erro ao carregar o arquivo .env")
-	}
-
 	db, err := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		os.Getenv("DB_HOST"),
 		os.Getenv("DB_PORT"),
