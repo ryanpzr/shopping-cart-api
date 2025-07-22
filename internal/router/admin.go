@@ -2,22 +2,22 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ryanpzr/shopping-cart-api/internal/service"
+	"github.com/ryanpzr/shopping-cart-api/internal/handler"
 )
 
 type Admin struct {
-	productService service.Product
+	hd handler.HandlerProduct
 }
 
-func NewAdmin(ps service.Product) *Admin {
-	return &Admin{productService: ps}
+func NewAdmin(hd handler.HandlerProduct) *Admin {
+	return &Admin{hd: hd}
 }
 
 func (a *Admin) AdminRouters(rg *gin.RouterGroup) {
 	admin := rg.Group("/admin")
 	{
-		admin.GET("/product/all", a.productService.GetAllProduct)
-		admin.POST("/product", a.productService.PostNewProduct)
-		admin.PUT("/product/:productId", a.productService.ChangeInfoProduct)
+		admin.GET("/product/all", a.hd.GetAllProduct)
+		admin.POST("/product", a.hd.PostNewProduct)
+		admin.PUT("/product/:productId", a.hd.ChangeInfoProduct)
 	}
 }

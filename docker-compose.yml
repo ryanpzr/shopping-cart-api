@@ -18,7 +18,7 @@ services:
     container_name: backend_sc
     restart: always
     environment:
-      DB_HOST: db
+      DB_HOST: pg
       DB_PORT: 5432
       DB_USER: root
       DB_PASSWORD: 12345
