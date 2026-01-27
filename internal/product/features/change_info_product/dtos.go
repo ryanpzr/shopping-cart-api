@@ -1,13 +1,4 @@
-package model
-
-type Product struct {
-	Id          int
-	Photo       string
-	Title       string
-	Description string
-	Price       float64
-	Quantity    int
-}
+package changeinfoproduct
 
 type ProductDTO struct {
 	Photo       *string  `json:"photo"`

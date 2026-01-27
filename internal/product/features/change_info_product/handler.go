@@ -1,44 +1,44 @@
-package handler
+package changeinfoproduct
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/ryanpzr/shopping-cart-api/internal/model"
-	"github.com/ryanpzr/shopping-cart-api/internal/service"
 	"net/http"
 	"regexp"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 )
 
-type HandlerProduct interface {
+type Handler interface {
 	GetAllProduct(ctx *gin.Context)
 	ChangeInfoProduct(ctx *gin.Context)
 	PostNewProduct(ctx *gin.Context)
 }
 
-type handlerProduct struct {
-	productService service.Product
+type handler struct {
+	usecase Usecase
 }
 
-func NewHandlerProduct(sv service.Product) HandlerProduct {
-	return &handlerProduct{
-		productService: sv,
+func NewHandler(sv Usecase) Handler {
+	return &handler{
+		usecase: sv,
 	}
 }
 
-func (h *handlerProduct) GetAllProduct(ctx *gin.Context) {
-	products, err := h.productService.GetAllProduct()
+func (h *handler) GetAllProduct(ctx *gin.Context) {
+	products, err := h.usecase.GetAllProduct()
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get products: " + err.Error()})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, map[string][]model.Product{
+	ctx.JSON(http.StatusOK, map[string][]domain.Product{
 		"data": products,
 	})
 }
 
-func (h *handlerProduct) PostNewProduct(ctx *gin.Context) {
-	var productDTO model.ProductDTO
+func (h *handler) PostNewProduct(ctx *gin.Context) {
+	var productDTO ProductDTO
 	err := ctx.BindJSON(&productDTO)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -71,7 +71,7 @@ func (h *handlerProduct) PostNewProduct(ctx *gin.Context) {
 		return
 	}
 
-	product := model.Product{
+	product := domain.Product{
 		Photo:       *productDTO.Photo,
 		Title:       *productDTO.Title,
 		Description: *productDTO.Description,
@@ -79,18 +79,18 @@ func (h *handlerProduct) PostNewProduct(ctx *gin.Context) {
 		Quantity:    *productDTO.Quantity,
 	}
 
-	result, err := h.productService.PostNewProduct(product)
+	result, err := h.usecase.PostNewProduct(product)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, map[string]model.Product{
+	ctx.JSON(http.StatusCreated, map[string]domain.Product{
 		"data": result,
 	})
 }
 
-func (h *handlerProduct) ChangeInfoProduct(ctx *gin.Context) {
+func (h *handler) ChangeInfoProduct(ctx *gin.Context) {
 	id := ctx.Param("productId")
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
@@ -98,7 +98,7 @@ func (h *handlerProduct) ChangeInfoProduct(ctx *gin.Context) {
 		return
 	}
 
-	var productDTO model.ProductDTO
+	var productDTO ProductDTO
 	err = ctx.BindJSON(&productDTO)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -126,7 +126,7 @@ func (h *handlerProduct) ChangeInfoProduct(ctx *gin.Context) {
 		return
 	}
 
-	product := model.Product{
+	product := domain.Product{
 		Photo:       *productDTO.Photo,
 		Title:       *productDTO.Title,
 		Description: *productDTO.Description,
@@ -134,7 +134,7 @@ func (h *handlerProduct) ChangeInfoProduct(ctx *gin.Context) {
 		Quantity:    *productDTO.Quantity,
 	}
 
-	err = h.productService.ChangeInfoProduct(idInt, product)
+	err = h.usecase.ChangeInfoProduct(idInt, product)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get product: " + err.Error()})
 		return
