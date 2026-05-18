@@ -11,6 +11,7 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
 
   backend:
     build:
@@ -18,7 +19,7 @@ services:
     container_name: backend_sc
     restart: always
     environment:
-      DB_HOST: pg
+      DB_HOST: db
       DB_PORT: 5432
       DB_USER: root
       DB_PASSWORD: 12345
