@@ -12,7 +12,22 @@ BASE_SHA      = os.environ["BASE_SHA"]
 HEAD_SHA      = os.environ["HEAD_SHA"]
 
 # Limite de caracteres do diff enviado ao modelo (evita estourar contexto)
-MAX_DIFF_CHARS = 30_000
+# Groq free tier: ~12k TPM. Código tem ~2.2 chars/token, logo ~8k chars deixa
+# margem segura para system prompt + overhead (~600 tokens).
+MAX_DIFF_CHARS = 8_000
+
+# Arquivos que não agregam valor ao code review (lock files, gerados, etc.)
+IGNORED_PATHS = (
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "Pipfile.lock",
+    "dist/",
+    "build/",
+    ".min.js",
+    ".min.css",
+)
 
 SYSTEM_PROMPT = """Você é um engenheiro de software sênior fazendo code review.
 Analise o diff fornecido e produza um diagnóstico claro em Markdown com as seções:
@@ -34,6 +49,27 @@ Seja direto e técnico. Não repita o diff na resposta."""
 
 
 # ── 1. Coletar o diff ──────────────────────────────────────────────────────────
+def _filter_diff(raw: str) -> str:
+    """Remove blocos de arquivos irrelevantes (lock files, gerados, etc.)."""
+    filtered_sections: list[str] = []
+    current: list[str] = []
+    skip = False
+
+    for line in raw.splitlines(keepends=True):
+        if line.startswith("diff --git"):
+            if current and not skip:
+                filtered_sections.append("".join(current))
+            current = [line]
+            skip = any(p in line for p in IGNORED_PATHS)
+        else:
+            current.append(line)
+
+    if current and not skip:
+        filtered_sections.append("".join(current))
+
+    return "".join(filtered_sections)
+
+
 def get_diff() -> str:
     result = subprocess.run(
         ["git", "diff", f"{BASE_SHA}...{HEAD_SHA}"],
@@ -41,7 +77,7 @@ def get_diff() -> str:
         text=True,
         check=True,
     )
-    diff = result.stdout
+    diff = _filter_diff(result.stdout)
     if len(diff) > MAX_DIFF_CHARS:
         diff = diff[:MAX_DIFF_CHARS] + "\n\n[... diff truncado por ser muito extenso ...]"
     return diff
