@@ -125,7 +125,8 @@ Rules:
 ## Checklist: Adding a New Module
 
 - [ ] Create `internal/<module>/domain/<model>.go` with domain structs
-- [ ] Create `internal/<module>/shared/repository.go` with `Repository` interface and `repository` struct implementing it
+- [ ] Create `internal/<module>/shared/queries.go` with SQL query constants (one file per module, shared across features)
+- [ ] Create `internal/<module>/shared/repository.go` with `Repository` interface and `repository` struct — reference constants from `queries.go`, no inline SQL
 - [ ] Create `internal/<module>/features/<feature>/ports.go` with `Usecase` and `Repository` interfaces
 - [ ] Create `internal/<module>/features/<feature>/dtos.go` with request/response types
 - [ ] Create `internal/<module>/features/<feature>/usecase.go` implementing `Usecase`
@@ -133,7 +134,69 @@ Rules:
 - [ ] Create `internal/<module>/routes.go` with `MapRouters(r *gin.RouterGroup, hd Handler)`
 - [ ] Add wiring block in `internal/app/setup/setup.go`
 - [ ] Add `api.Group("/<module>")` + `<module>.MapRouters(...)` in `internal/app/route/routes.go`
+- [ ] Write tests for usecase and handler (`testify/assert` + `testify/mock`)
 - [ ] Run `go build ./...` — must compile with no errors
+
+---
+
+## Error Handling Pattern
+
+All modules use a single typed error approach via `pkg/apperrors`. Do not use raw `errors.New` or inline HTTP status codes for domain errors.
+
+### AppError struct
+
+```go
+// pkg/apperrors/app_error.go
+type AppError struct {
+    Code    int    // HTTP status code
+    Message string // user-facing message
+}
+```
+
+**Constructor functions — use the one that matches the semantic:**
+
+| Function | Status | When to use |
+|---|---|---|
+| `NewBadRequest(msg)` | 400 | Invalid input that should have been caught by the client |
+| `NewUnauthorized(msg)` | 401 | Missing/invalid token, wrong credentials |
+| `NewForbidden(msg)` | 403 | Valid token but insufficient permissions, banned/timeout |
+| `NewNotFound(msg)` | 404 | Resource does not exist |
+| `NewConflict(msg)` | 409 | Uniqueness violation (e.g. duplicate email) |
+| `NewTooManyRequests(msg)` | 429 | Rate limiting |
+| `NewInternalServer(msg)` | 500 | Unexpected failures |
+
+**Rule:** always pass a specific, context-aware message. Never use `NewInternalServer("error")` — pass `err.Error()` or a meaningful description.
+
+### Handling in handlers
+
+Use `apperrors.HandleError(c, err)` for **all** error responses — including input validation:
+
+```go
+func (h *handler) Create(c *gin.Context) {
+    var req CreateRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        apperrors.HandleError(c, apperrors.NewBadRequest("invalid request body"))
+        return
+    }
+    if req.Name == "" {
+        apperrors.HandleError(c, apperrors.NewBadRequest("name is required"))
+        return
+    }
+
+    resp, err := h.usecase.Create(req)
+    if err != nil {
+        apperrors.HandleError(c, err)
+        return
+    }
+
+    c.JSON(http.StatusCreated, resp)
+}
+```
+
+**Rules:**
+- `c.JSON(...)` is only used for **success** responses
+- All error paths go through `apperrors.HandleError` — never `c.JSON` directly for errors
+- Return `*apperrors.AppError` from usecases and repositories — never `fmt.Errorf` or raw strings for domain errors
 
 ---
 
