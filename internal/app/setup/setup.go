@@ -7,7 +7,13 @@ import (
 	"github.com/ryanpzr/shopping-cart-api/internal/app/route"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/login"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/register"
-	changeinfoproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/change_info_product"
+	"github.com/ryanpzr/shopping-cart-api/internal/product"
+	createproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/create_product"
+	deleteproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/delete_product"
+	getproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/get_product"
+	listproducts "github.com/ryanpzr/shopping-cart-api/internal/product/features/list_products"
+	togglestatus "github.com/ryanpzr/shopping-cart-api/internal/product/features/toggle_status"
+	updateproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/update_product"
 	productshared "github.com/ryanpzr/shopping-cart-api/internal/product/shared"
 	adminactivitylog "github.com/ryanpzr/shopping-cart-api/internal/user/features/admin_activity_log"
 	admingetuser "github.com/ryanpzr/shopping-cart-api/internal/user/features/admin_get_user"
@@ -30,29 +36,29 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 
 	// Product features
 	rpProduct := productshared.NewRepository(conn)
-	usProduct := changeinfoproduct.NewUsecase(rpProduct)
-	hdProduct := changeinfoproduct.NewHandler(usProduct)
+	hdProducts := product.ProductHandlers{
+		List:   listproducts.NewHandler(listproducts.NewUsecase(rpProduct)),
+		Get:    getproduct.NewHandler(getproduct.NewUsecase(rpProduct)),
+		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
+		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
+		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
+		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct)),
+	}
 
 	// User features — client
-	usGetMe := getme.NewUsecase(rpUser)
-	usUpdateMe := updateme.NewUsecase(rpUser)
-	hdGetMe := getme.NewHandler(usGetMe)
-	hdUpdateMe := updateme.NewHandler(usUpdateMe)
+	hdGetMe := getme.NewHandler(getme.NewUsecase(rpUser))
+	hdUpdateMe := updateme.NewHandler(updateme.NewUsecase(rpUser))
 
 	// User features — admin
-	usAdminList := adminlistusers.NewUsecase(rpUser)
-	usAdminGet := admingetuser.NewUsecase(rpUser)
-	usManage := adminmanageuser.NewUsecase(rpUser)
-	usActivity := adminactivitylog.NewUsecase() // stub: no repository until module 06
-	hdAdminList := adminlistusers.NewHandler(usAdminList)
-	hdAdminGet := admingetuser.NewHandler(usAdminGet)
-	hdManage := adminmanageuser.NewHandler(usManage)
-	hdActivity := adminactivitylog.NewHandler(usActivity)
+	hdAdminList := adminlistusers.NewHandler(adminlistusers.NewUsecase(rpUser))
+	hdAdminGet := admingetuser.NewHandler(admingetuser.NewUsecase(rpUser))
+	hdManage := adminmanageuser.NewHandler(adminmanageuser.NewUsecase(rpUser))
+	hdActivity := adminactivitylog.NewHandler(adminactivitylog.NewUsecase()) // stub: módulo 06
 
 	route.RegisterRoutes(
 		api,
 		hdRegister, hdLogin,
-		hdProduct,
+		hdProducts,
 		hdGetMe, hdUpdateMe,
 		hdAdminList, hdAdminGet, hdManage, hdActivity,
 	)
