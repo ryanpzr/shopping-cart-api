@@ -1,0 +1,827 @@
+openapi: 3.0.3
+
+info:
+  title: Shopping Cart API
+  description: REST API for a shopping cart system. Handles authentication, user management, products, cart and orders.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Public routes — no token required
+  - name: User
+    description: Authenticated user — own profile management
+  - name: Admin
+    description: Admin-only — user administration
+  - name: Products
+    description: Product catalog management
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ─── Auth ───────────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        password:
+          type: string
+          minLength: 8
+          example: password123
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        password:
+          type: string
+          example: password123
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserPublic'
+        token:
+          type: string
+          example: eyJhbGci...
+
+    # ─── User ───────────────────────────────────────────────────────────────
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          example: john@example.com
+        role:
+          type: string
+          enum: [client, admin]
+          example: client
+        status:
+          type: string
+          enum: [active, banned, timeout]
+          example: active
+        created_at:
+          type: string
+          format: date-time
+
+    UserProfile:
+      allOf:
+        - $ref: '#/components/schemas/UserPublic'
+        - type: object
+          properties:
+            updated_at:
+              type: string
+              format: date-time
+
+    UserAdmin:
+      allOf:
+        - $ref: '#/components/schemas/UserProfile'
+        - type: object
+          properties:
+            timeout_until:
+              type: string
+              format: date-time
+              nullable: true
+
+    UpdateMeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: New Name
+        email:
+          type: string
+          format: email
+          example: newemail@example.com
+
+    TimeoutRequest:
+      type: object
+      required: [duration_hours]
+      properties:
+        duration_hours:
+          type: integer
+          minimum: 1
+          example: 24
+
+    ManageUserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          example: john@example.com
+        role:
+          type: string
+          enum: [client, admin]
+          example: client
+        status:
+          type: string
+          enum: [active, banned, timeout]
+          example: banned
+        timeout_until:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        updated_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T10:30:00Z"
+
+    PaginatedUsers:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserPublic'
+        total:
+          type: integer
+          example: 100
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 5
+
+    ActivityLogResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+          example: 0
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        total_pages:
+          type: integer
+          example: 0
+
+    # ─── Product ────────────────────────────────────────────────────────────
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        photo:
+          type: string
+          example: https://cdn.example.com/photo.jpg
+        title:
+          type: string
+          example: ProductName
+        description:
+          type: string
+          example: Product description
+        price:
+          type: number
+          format: float
+          example: 49.90
+        quantity:
+          type: integer
+          example: 10
+
+    ProductRequest:
+      type: object
+      required: [photo, title, description, price, quantity]
+      properties:
+        photo:
+          type: string
+          description: URL of the product image
+          example: https://cdn.example.com/photo.jpg
+        title:
+          type: string
+          description: Only letters allowed — no numbers or special characters
+          pattern: '^[A-Za-z]+$'
+          example: ProductName
+        description:
+          type: string
+          example: Full product description
+        price:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 49.90
+        quantity:
+          type: integer
+          minimum: 1
+          example: 10
+
+    # ─── Errors ─────────────────────────────────────────────────────────────
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: descriptive error message
+
+# ─── Paths ──────────────────────────────────────────────────────────────────
+paths:
+
+  # Auth ─────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              name: John Doe
+              email: john@example.com
+              password: password123
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate and receive a JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: john@example.com
+              password: password123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Missing fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Account restricted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # User — Client ────────────────────────────────────────────────────────────
+  /users/me:
+    get:
+      tags: [User]
+      summary: Get own profile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPublic'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [User]
+      summary: Update own profile (name and/or email)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeRequest'
+            examples:
+              update_name_only:
+                summary: Update only name
+                value:
+                  name: New Name
+              update_email_only:
+                summary: Update only email
+                value:
+                  email: newemail@example.com
+              update_both:
+                summary: Update both fields
+                value:
+                  name: New Name
+                  email: newemail@example.com
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid or missing fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # User — Admin ─────────────────────────────────────────────────────────────
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List all users (paginated)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsers'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Get user by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Full user object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAdmin'
+        '400':
+          description: Invalid ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{id}/ban:
+    patch:
+      tags: [Admin]
+      summary: Ban a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User banned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManageUserResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient role or target is admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{id}/timeout:
+    patch:
+      tags: [Admin]
+      summary: Temporarily restrict a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeoutRequest'
+            examples:
+              one_hour:
+                summary: 1 hour timeout
+                value:
+                  duration_hours: 1
+              one_day:
+                summary: 24 hour timeout
+                value:
+                  duration_hours: 24
+              one_week:
+                summary: 1 week timeout
+                value:
+                  duration_hours: 168
+      responses:
+        '200':
+          description: User timed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManageUserResponse'
+        '400':
+          description: Invalid or missing duration_hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient role or target is admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{id}/unban:
+    patch:
+      tags: [Admin]
+      summary: Remove ban or timeout from a user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User restriction removed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManageUserResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient role or target is admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/users/{id}/activity:
+    get:
+      tags: [Admin]
+      summary: Get activity log for a user (stub — returns empty list)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Paginated activity log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityLogResponse'
+        '400':
+          description: Invalid user ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Products ─────────────────────────────────────────────────────────────────
+  /products:
+    get:
+      tags: [Products]
+      summary: List all products
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [Products]
+      summary: Create a product
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductRequest'
+            example:
+              photo: https://cdn.example.com/photo.jpg
+              title: ProductName
+              description: Full product description
+              price: 49.90
+              quantity: 10
+      responses:
+        '201':
+          description: Product created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+              example:
+                data:
+                  id: 1
+                  photo: https://cdn.example.com/photo.jpg
+                  title: ProductName
+                  description: Full product description
+                  price: 49.90
+                  quantity: 10
+        '400':
+          description: Missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_photo:
+                  summary: Photo not provided
+                  value:
+                    error: "Product photo can't be nil"
+                invalid_title:
+                  summary: Title contains numbers or special characters
+                  value:
+                    error: "Title there isn't numbers"
+                zero_price:
+                  summary: Price is zero
+                  value:
+                    error: "Product price can't be zero or nil"
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /products/{productId}:
+    put:
+      tags: [Products]
+      summary: Update a product
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductRequest'
+            example:
+              photo: https://cdn.example.com/updated-photo.jpg
+              title: UpdatedName
+              description: Updated product description
+              price: 59.90
+              quantity: 5
+      responses:
+        '200':
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                type: string
+              example: product updated
+        '400':
+          description: Missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_id:
+                  summary: Non-numeric product ID
+                  value:
+                    error: "product id should be int"
+                missing_photo:
+                  summary: Photo not provided
+                  value:
+                    error: "Product photo can't be nil"
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Failed to update product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
