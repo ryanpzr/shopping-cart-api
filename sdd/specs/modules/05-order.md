@@ -102,6 +102,17 @@ pending → paid → shipped → delivered
 
 Orders are not created via a direct POST /orders endpoint. They are created by the checkout flow in `BR-CART-005`. The Order module only exposes read and status-update operations.
 
+## Cross-Module Notes
+
+> **Desbloqueio automático — módulo product:**
+> A query `queryHasActiveOrders` em `internal/product/shared/queries.go` já está implementada
+> e aguarda a existência da tabela `orders`. Assim que a migration abaixo for executada,
+> o guard de delete em `internal/product/features/delete_product/usecase.go` passará a
+> funcionar em runtime sem nenhuma alteração de código.
+>
+> Certifique-se de que a tabela `order_items` inclui a coluna `product_id` conforme o schema
+> definido neste spec — ela é a FK referenciada pela query do guard.
+
 ## Implementation Checklist
 
 - [ ] Migration SQL — create `orders` and `order_items` tables + indexes

@@ -206,48 +206,159 @@ components:
         id:
           type: integer
           example: 1
+        seller_id:
+          type: integer
+          example: 2
         photo:
           type: string
+          nullable: true
           example: https://cdn.example.com/photo.jpg
         title:
           type: string
-          example: ProductName
+          example: Wireless Headphones
         description:
           type: string
-          example: Product description
+          nullable: true
+          example: Noise-cancelling over-ear headphones
         price:
           type: number
           format: float
-          example: 49.90
+          example: 199.90
+        discount_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 10
+        final_price:
+          type: number
+          format: float
+          description: Computed — price * (1 - discount_percentage / 100)
+          example: 179.91
         quantity:
           type: integer
-          example: 10
+          minimum: 0
+          example: 50
+        status:
+          type: string
+          enum: [active, inactive]
+          example: active
+        category:
+          type: string
+          nullable: true
+          example: Electronics
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
-    ProductRequest:
+    ProductListResponse:
       type: object
-      required: [photo, title, description, price, quantity]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+              example: 100
+            limit:
+              type: integer
+              example: 20
+            offset:
+              type: integer
+              example: 0
+
+    CreateProductRequest:
+      type: object
+      required: [title, price, quantity]
       properties:
         photo:
           type: string
-          description: URL of the product image
+          nullable: true
           example: https://cdn.example.com/photo.jpg
         title:
           type: string
-          description: Only letters allowed — no numbers or special characters
-          pattern: '^[A-Za-z]+$'
-          example: ProductName
+          example: Wireless Headphones
         description:
           type: string
-          example: Full product description
+          nullable: true
+          example: Noise-cancelling over-ear headphones
         price:
           type: number
           format: float
           minimum: 0.01
-          example: 49.90
+          example: 199.90
+        discount_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+          example: 10
         quantity:
           type: integer
-          minimum: 1
-          example: 10
+          minimum: 0
+          example: 50
+        category:
+          type: string
+          nullable: true
+          example: Electronics
+
+    UpdateProductRequest:
+      type: object
+      description: Partial update — omit fields you do not want to change
+      properties:
+        photo:
+          type: string
+          nullable: true
+          example: https://cdn.example.com/new-photo.jpg
+        title:
+          type: string
+          example: Updated Title
+        description:
+          type: string
+          nullable: true
+          example: Updated description
+        price:
+          type: number
+          format: float
+          minimum: 0.01
+          example: 149.90
+        discount_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 15
+        quantity:
+          type: integer
+          minimum: 0
+          example: 30
+        category:
+          type: string
+          nullable: true
+          example: Electronics
+
+    ToggleStatusResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [active, inactive]
+          example: inactive
+
+    DeleteResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: product deleted successfully
 
     # ─── Errors ─────────────────────────────────────────────────────────────
     ErrorResponse:
@@ -682,63 +793,96 @@ paths:
   /products:
     get:
       tags: [Products]
-      summary: List all products
-      security:
-        - BearerAuth: []
+      summary: List active products (public)
+      description: Returns only products with status=active. Supports filters and pagination.
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+          example: Electronics
+        - name: min_price
+          in: query
+          schema:
+            type: number
+          example: 10.00
+        - name: max_price
+          in: query
+          schema:
+            type: number
+          example: 500.00
+        - name: search
+          in: query
+          description: Case-insensitive match against product title
+          schema:
+            type: string
+          example: headphone
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+          example: 0
       responses:
         '200':
-          description: Product list
+          description: Paginated product list
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Product'
-        '401':
-          description: Token missing or invalid
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/ProductListResponse'
+              example:
+                data:
+                  - id: 1
+                    seller_id: 2
+                    photo: https://cdn.example.com/photo.jpg
+                    title: Wireless Headphones
+                    description: Noise-cancelling over-ear headphones
+                    price: 199.90
+                    discount_percentage: 10
+                    final_price: 179.91
+                    quantity: 50
+                    status: active
+                    category: Electronics
+                    created_at: "2025-01-01T00:00:00Z"
+                    updated_at: "2025-01-01T00:00:00Z"
+                meta:
+                  total: 1
+                  limit: 20
+                  offset: 0
 
     post:
       tags: [Products]
       summary: Create a product
       security:
         - BearerAuth: []
+      description: seller_id is injected from the JWT — do not send it in the body.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductRequest'
+              $ref: '#/components/schemas/CreateProductRequest'
             example:
+              title: Wireless Headphones
+              price: 199.90
+              quantity: 50
               photo: https://cdn.example.com/photo.jpg
-              title: ProductName
-              description: Full product description
-              price: 49.90
-              quantity: 10
+              description: Noise-cancelling over-ear headphones
+              discount_percentage: 10
+              category: Electronics
       responses:
         '201':
           description: Product created
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/Product'
-              example:
-                data:
-                  id: 1
-                  photo: https://cdn.example.com/photo.jpg
-                  title: ProductName
-                  description: Full product description
-                  price: 49.90
-                  quantity: 10
+                $ref: '#/components/schemas/Product'
         '400':
           description: Missing or invalid fields
           content:
@@ -746,18 +890,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               examples:
-                missing_photo:
-                  summary: Photo not provided
+                missing_title:
                   value:
-                    error: "Product photo can't be nil"
-                invalid_title:
-                  summary: Title contains numbers or special characters
+                    error: title is required
+                invalid_price:
                   value:
-                    error: "Title there isn't numbers"
-                zero_price:
-                  summary: Price is zero
+                    error: price must be greater than 0
+                invalid_discount:
                   value:
-                    error: "Product price can't be zero or nil"
+                    error: discount_percentage must be between 0 and 100
+                negative_quantity:
+                  value:
+                    error: quantity must be >= 0
         '401':
           description: Token missing or invalid
           content:
@@ -765,14 +909,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /products/{productId}:
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: Get product by ID (public)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '400':
+          description: Invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     put:
       tags: [Products]
-      summary: Update a product
+      summary: Update a product (partial — owner only)
       security:
         - BearerAuth: []
+      description: Partial update — only send the fields you want to change. seller_id is ignored even if sent.
       parameters:
-        - name: productId
+        - name: id
           in: path
           required: true
           schema:
@@ -783,44 +958,138 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductRequest'
+              $ref: '#/components/schemas/UpdateProductRequest'
             example:
-              photo: https://cdn.example.com/updated-photo.jpg
-              title: UpdatedName
-              description: Updated product description
-              price: 59.90
-              quantity: 5
+              price: 149.90
+              discount_percentage: 15
       responses:
         '200':
-          description: Product updated
+          description: Updated product
           content:
             application/json:
               schema:
-                type: string
-              example: product updated
+                $ref: '#/components/schemas/Product'
         '400':
-          description: Missing or invalid fields
+          description: Invalid field values
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                invalid_id:
-                  summary: Non-numeric product ID
-                  value:
-                    error: "product id should be int"
-                missing_photo:
-                  summary: Photo not provided
-                  value:
-                    error: "Product photo can't be nil"
         '401':
           description: Token missing or invalid
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: Failed to update product
+        '403':
+          description: Not the owner of this product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [Products]
+      summary: Delete a product (owner or admin)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Product deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not the owner and not admin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Product has active orders (pending/paid/shipped)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /products/{id}/status:
+    patch:
+      tags: [Products]
+      summary: Toggle product visibility (owner only)
+      security:
+        - BearerAuth: []
+      description: Toggles between active and inactive. Inactive products are hidden from the public listing.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        '200':
+          description: Status toggled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToggleStatusResponse'
+              examples:
+                deactivated:
+                  summary: Product deactivated
+                  value:
+                    id: 1
+                    status: inactive
+                activated:
+                  summary: Product activated
+                  value:
+                    id: 1
+                    status: active
+        '400':
+          description: Invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Not the owner of this product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found
           content:
             application/json:
               schema:
