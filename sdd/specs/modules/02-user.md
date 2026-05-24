@@ -65,6 +65,10 @@
 - Implemented here but reads from `activity_logs` table created in `06-activity-log`
 - Event types: `login`, `product_created`, `product_updated`, `product_deleted`, `order_placed`, `order_cancelled`, `cart_checkout`
 
+> ⚠️ STUB — implementado em `internal/user/features/admin_activity_log/` retornando lista vazia paginada.
+> A implementação real deve ser feita no módulo 06: substituir o usecase stub pelo real
+> que injeta `activitylog.Repository`. Ver checklist em `06-activity-log.md`.
+
 ## Implementation Checklist
 
 - [ ] `internal/user/features/get_profile/` — handler, usecase, ports, dtos

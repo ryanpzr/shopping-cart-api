@@ -32,6 +32,17 @@ func (m *mockUserRepo) Create(user domain.User) (domain.User, error) {
 	return args.Get(0).(domain.User), args.Error(1)
 }
 
+func (m *mockUserRepo) FindByID(id int) (*domain.User, error) { return nil, nil }
+func (m *mockUserRepo) FindAll(limit, offset int) ([]domain.User, int, error) {
+	return nil, 0, nil
+}
+func (m *mockUserRepo) UpdateProfile(id int, name, email string) (domain.User, error) {
+	return domain.User{}, nil
+}
+func (m *mockUserRepo) UpdateStatus(id int, status string, t *time.Time) (domain.User, error) {
+	return domain.User{}, nil
+}
+
 func hashedPassword(t *testing.T, pwd string) string {
 	t.Helper()
 	h, err := bcrypt.GenerateFromPassword([]byte(pwd), bcrypt.MinCost)

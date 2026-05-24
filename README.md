@@ -1,6 +1,6 @@
 # Shopping Cart API
 
-REST API for a shopping cart system built with Go and Gin. Handles authentication, product management, cart, and orders.
+REST API for a shopping cart system built with Go and Gin. Handles authentication, user management, product management, cart, and orders.
 
 ## Tech Stack
 
@@ -19,15 +19,25 @@ config/          # Database connection setup
 internal/
   app/           # Wiring (setup + route aggregation)
   auth/          # Auth module (register, login)
-  user/          # User domain and repository
+  user/
+    domain/      # User entity
+    shared/      # Repository (shared across features)
+    features/
+      get_me/              # GET /users/me
+      update_me/           # PUT /users/me
+      admin_get_user/      # GET /admin/users/:id
+      admin_list_users/    # GET /admin/users
+      admin_manage_user/   # PATCH /admin/users/:id/ban|timeout|unban
+      admin_activity_log/  # GET /admin/users/:id/activity (stub)
+    routes.go    # Client and admin route mapping
   product/       # Product module
   cart/          # Cart module (in progress)
 pkg/
   apperrors/     # Typed error handling
   jwt/           # JWT generate/parse
-  middleware/    # Auth middleware
+  middleware/    # Auth and role middleware
 sdd/specs/       # Business rules and module specifications
-db/migrations/   # SQL migration files (not committed)
+db/migrations/   # SQL migration files
 ```
 
 ## Getting Started
@@ -149,7 +159,7 @@ POST /api/v1/auth/login
 |---|---|
 | 400 | Missing fields |
 | 401 | Invalid email or password |
-| 403 | Account is banned or in timeout |
+| 403 | Account restricted |
 
 ---
 
@@ -165,6 +175,204 @@ Authorization: Bearer <token>
 |---|---|
 | 401 | Token missing, malformed, or expired |
 | 403 | Token valid but insufficient role |
+
+---
+
+### User — Client
+
+Requires a valid token (any role).
+
+#### Get own profile
+
+```
+GET /api/v1/users/me
+```
+
+**Response `200`:**
+
+```json
+{
+  "id": 1,
+  "name": "John Doe",
+  "email": "john@example.com",
+  "role": "client",
+  "status": "active",
+  "created_at": "2025-01-01T00:00:00Z"
+}
+```
+
+---
+
+#### Update own profile
+
+```
+PUT /api/v1/users/me
+```
+
+Partial update — send only the fields you want to change.
+
+**Body:**
+
+```json
+{
+  "name": "New Name",
+  "email": "newemail@example.com"
+}
+```
+
+**Validation:**
+- At least one field (`name` or `email`) must be provided
+- `email`, if provided, must be a valid email address
+- `role` and `status` cannot be changed through this endpoint
+
+**Response `200`:** updated user profile (same shape as GET /users/me, plus `updated_at`)
+
+**Errors:**
+
+| Status | Reason |
+|---|---|
+| 400 | Invalid or missing fields |
+| 409 | Email already in use |
+
+---
+
+### User — Admin
+
+Requires a valid token with `admin` role.
+
+#### List all users
+
+```
+GET /api/v1/admin/users
+```
+
+**Query params:**
+
+| Param | Default | Max | Description |
+|---|---|---|---|
+| `page` | `1` | — | Page number |
+| `limit` | `20` | `100` | Items per page |
+
+**Response `200`:**
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "client",
+      "status": "active",
+      "created_at": "2025-01-01T00:00:00Z"
+    }
+  ],
+  "total": 100,
+  "page": 1,
+  "limit": 20,
+  "total_pages": 5
+}
+```
+
+---
+
+#### Get user by ID
+
+```
+GET /api/v1/admin/users/:id
+```
+
+**Response `200`:** full user object including `timeout_until` and `updated_at`
+
+**Errors:**
+
+| Status | Reason |
+|---|---|
+| 400 | Invalid ID |
+| 404 | User not found |
+
+---
+
+#### Ban user
+
+```
+PATCH /api/v1/admin/users/:id/ban
+```
+
+**Errors:**
+
+| Status | Reason |
+|---|---|
+| 403 | Target user is an admin |
+| 404 | User not found |
+
+---
+
+#### Timeout user
+
+```
+PATCH /api/v1/admin/users/:id/timeout
+```
+
+**Body:**
+
+```json
+{
+  "duration_hours": 24
+}
+```
+
+**Validation:**
+- `duration_hours` must be a positive integer
+
+**Errors:**
+
+| Status | Reason |
+|---|---|
+| 400 | Missing or invalid `duration_hours` |
+| 403 | Target user is an admin |
+| 404 | User not found |
+
+---
+
+#### Remove restriction (unban / undo timeout)
+
+```
+PATCH /api/v1/admin/users/:id/unban
+```
+
+Sets the user's status back to `active`.
+
+**Errors:**
+
+| Status | Reason |
+|---|---|
+| 403 | Target user is an admin |
+| 404 | User not found |
+
+---
+
+#### Activity log
+
+```
+GET /api/v1/admin/users/:id/activity
+```
+
+> **Note:** This endpoint is available but returns an empty list until the activity log module is fully implemented.
+
+**Query params:** `page`, `limit` (same defaults as list users)
+
+**Response `200`:**
+
+```json
+{
+  "data": [],
+  "total": 0,
+  "page": 1,
+  "limit": 20,
+  "total_pages": 0
+}
+```
 
 ---
 
@@ -212,7 +420,9 @@ PUT /api/v1/products/:productId
 | Role | Description |
 |---|---|
 | `client` | Default role assigned on register |
-| `admin` | Extended permissions (managed via database) |
+| `admin` | Extended permissions — assigned directly in the database |
+
+---
 
 ## Running Tests
 
@@ -222,12 +432,14 @@ go test ./...
 
 Tests use `testify` with mocked dependencies — no database connection required.
 
+---
+
 ## Modules
 
 | Module | Status | Spec |
 |---|---|---|
 | Auth | Done | [01-auth.md](sdd/specs/modules/01-auth.md) |
-| User | Planned | [02-user.md](sdd/specs/modules/02-user.md) |
+| User | Done | [02-user.md](sdd/specs/modules/02-user.md) |
 | Product | Partial | [03-product.md](sdd/specs/modules/03-product.md) |
 | Cart | In progress | [04-cart.md](sdd/specs/modules/04-cart.md) |
 | Order | Planned | [05-order.md](sdd/specs/modules/05-order.md) |

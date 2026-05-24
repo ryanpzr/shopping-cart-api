@@ -1,3 +1,34 @@
+# Environment variables — never commit secrets
 .env
+.env.*
+!.env.example
+
+# Database migrations (managed separately)
 db/migrations/
+
+# Claude Code
 .claude/
+
+# IDE — IntelliJ / GoLand
+.idea/
+
+# IDE — VS Code
+.vscode/
+
+# Go build artifacts
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Go coverage output
+*.out
+coverage.html
+
+# Docker local overrides (use docker-compose.override.yml for local secrets)
+docker-compose.override.yml

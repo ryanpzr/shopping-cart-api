@@ -75,6 +75,8 @@ Each usecase that needs to log an event calls this function after the main opera
 - [ ] `internal/activitylog/domain/log.go` — ActivityLog struct
 - [ ] `internal/activitylog/shared/repository.go` — `FindByUser` (with pagination + optional event_type filter)
 - [ ] `internal/activitylog/features/list_activity/` — handler, usecase, ports, dtos
-- [ ] Register the handler in `02-user` routes under `/admin/users/:id/activity`
+- [ ] Substituir o stub em `internal/user/features/admin_activity_log/usecase.go`:
+      trocar `usecase struct{}` por `usecase struct{ repo Repository }` onde
+      `Repository = activitylog_shared.Repository`. O handler e as rotas NÃO mudam.
 - [ ] Add `pkg/activitylog.Log(...)` calls to: Auth login, Product create/update/delete, Cart checkout, Order cancel
 - [ ] Manual test: perform each logged action → call GET /admin/users/:id/activity → verify events appear
