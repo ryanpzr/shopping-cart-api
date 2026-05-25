@@ -227,7 +227,7 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 100
+          maximum: 80
           example: 10
         final_price:
           type: number
@@ -236,7 +236,7 @@ components:
           example: 179.91
         quantity:
           type: integer
-          minimum: 0
+          minimum: 1
           example: 50
         status:
           type: string
@@ -245,6 +245,7 @@ components:
         category:
           type: string
           nullable: true
+          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
         created_at:
           type: string
@@ -292,20 +293,22 @@ components:
           type: number
           format: float
           minimum: 0.01
+          maximum: 1000000
           example: 199.90
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 100
+          maximum: 80
           default: 0
           example: 10
         quantity:
           type: integer
-          minimum: 0
+          minimum: 1
           example: 50
         category:
           type: string
           nullable: true
+          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
 
     UpdateProductRequest:
@@ -327,19 +330,21 @@ components:
           type: number
           format: float
           minimum: 0.01
+          maximum: 1000000
           example: 149.90
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 100
+          maximum: 80
           example: 15
         quantity:
           type: integer
-          minimum: 0
+          minimum: 1
           example: 30
         category:
           type: string
           nullable: true
+          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
 
     ToggleStatusResponse:
@@ -896,12 +901,15 @@ paths:
                 invalid_price:
                   value:
                     error: price must be greater than 0
+                price_too_high:
+                  value:
+                    error: price must not exceed 1,000,000
                 invalid_discount:
                   value:
-                    error: discount_percentage must be between 0 and 100
-                negative_quantity:
+                    error: discount_percentage must be between 0 and 80
+                invalid_quantity:
                   value:
-                    error: quantity must be >= 0
+                    error: quantity must be at least 1
         '401':
           description: Token missing or invalid
           content:
