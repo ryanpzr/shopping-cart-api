@@ -34,12 +34,16 @@ func (h *handler) Create(c *gin.Context) {
 		apperrors.HandleError(c, apperrors.NewBadRequest("price must be greater than 0"))
 		return
 	}
-	if req.Quantity < 0 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("quantity must be >= 0"))
+	if req.Quantity < 1 {
+		apperrors.HandleError(c, apperrors.NewBadRequest("quantity must be at least 1"))
 		return
 	}
-	if req.DiscountPercentage != nil && (*req.DiscountPercentage < 0 || *req.DiscountPercentage > 100) {
-		apperrors.HandleError(c, apperrors.NewBadRequest("discount_percentage must be between 0 and 100"))
+	if req.Price > 1_000_000 {
+		apperrors.HandleError(c, apperrors.NewBadRequest("price must not exceed 1,000,000"))
+		return
+	}
+	if req.DiscountPercentage != nil && (*req.DiscountPercentage < 0 || *req.DiscountPercentage > 80) {
+		apperrors.HandleError(c, apperrors.NewBadRequest("discount_percentage must be between 0 and 80"))
 		return
 	}
 
