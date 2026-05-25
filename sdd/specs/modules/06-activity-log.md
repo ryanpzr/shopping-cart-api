@@ -78,5 +78,12 @@ Each usecase that needs to log an event calls this function after the main opera
 - [ ] Substituir o stub em `internal/user/features/admin_activity_log/usecase.go`:
       trocar `usecase struct{}` por `usecase struct{ repo Repository }` onde
       `Repository = activitylog_shared.Repository`. O handler e as rotas NÃO mudam.
-- [ ] Add `pkg/activitylog.Log(...)` calls to: Auth login, Product create/update/delete, Cart checkout, Order cancel
+- [ ] Add `pkg/activitylog.Log(...)` calls nos seguintes pontos (TODOs já inseridos no código):
+  - **Auth login** — `internal/auth/features/login/usecase.go` (evento `login`)
+  - **Product create** — `internal/product/features/create_product/usecase.go` (evento `product_created`, metadata: `product_id`, `title`)
+  - **Product update** — `internal/product/features/update_product/usecase.go` (evento `product_updated`, metadata: `product_id`, `changed_fields`)
+  - **Product delete** — `internal/product/features/delete_product/usecase.go` (evento `product_deleted`, metadata: `product_id`, `title`)
+  - **Cart checkout** — `internal/cart/...` (eventos `cart_checkout` e `order_placed`)
+  - **Order cancel** — `internal/order/features/cancel_order/usecase.go` (evento `order_cancelled`)
+- [ ] Substituir stub `internal/user/features/admin_activity_log/usecase.go` pelo repositório real de activity log
 - [ ] Manual test: perform each logged action → call GET /admin/users/:id/activity → verify events appear

@@ -1,10 +1,18 @@
 package domain
 
+import "time"
+
 type Product struct {
-	Id          int
-	Photo       string
-	Title       string
-	Description string
-	Price       float64
-	Quantity    int
+	ID                 int
+	SellerID           int
+	Photo              *string
+	Title              string
+	Description        *string
+	Price              float64
+	DiscountPercentage int
+	Quantity           int
+	Status             string
+	Category           *string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
