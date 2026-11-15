@@ -104,14 +104,17 @@ Orders are not created via a direct POST /orders endpoint. They are created by t
 
 ## Cross-Module Notes
 
-> **Desbloqueio automático — módulo product:**
-> A query `queryHasActiveOrders` em `internal/product/shared/queries.go` já está implementada
-> e aguarda a existência da tabela `orders`. Assim que a migration abaixo for executada,
-> o guard de delete em `internal/product/features/delete_product/usecase.go` passará a
-> funcionar em runtime sem nenhuma alteração de código.
->
-> Certifique-se de que a tabela `order_items` inclui a coluna `product_id` conforme o schema
-> definido neste spec — ela é a FK referenciada pela query do guard.
+**Product delete guard (BR-PROD-006).** `HasActiveOrders` in `internal/product/shared/repository.go`
+joins `order_items` (by `product_id`) with `orders` and looks for `pending`, `paid` or `shipped`
+orders. Until the `orders` and `order_items` tables exist it returns `false`, so product deletion
+works before this module. Once this module's migration runs, the guard applies with no code change.
+Keep the table and column names above (`order_items.product_id`, `order_items.order_id`, `orders.status`).
+
+**Open question — deleting products with past orders.** `order_items.product_id` references
+`products(id)` with the default `NO ACTION`, so a hard delete of a product that appears in a
+`delivered` or `cancelled` order will fail on the foreign key. Decide in this module whether to
+keep product rows (soft delete), use `ON DELETE SET NULL` on a nullable `product_id`, or block
+the delete with `ErrConflict`.
 
 ## Implementation Checklist
 

@@ -227,16 +227,16 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 80
+          maximum: 100
           example: 10
         final_price:
           type: number
           format: float
-          description: Computed — price * (1 - discount_percentage / 100)
+          description: Computed — price * (1 - discount_percentage / 100), rounded to 2 decimals
           example: 179.91
         quantity:
           type: integer
-          minimum: 1
+          minimum: 0
           example: 50
         status:
           type: string
@@ -245,7 +245,7 @@ components:
         category:
           type: string
           nullable: true
-          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
+          maxLength: 100
           example: Electronics
         created_at:
           type: string
@@ -298,22 +298,23 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 80
+          maximum: 100
           default: 0
           example: 10
         quantity:
           type: integer
-          minimum: 1
+          minimum: 0
           example: 50
         category:
           type: string
           nullable: true
-          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
+          maxLength: 100
           example: Electronics
 
     UpdateProductRequest:
       type: object
-      description: Partial update — omit fields you do not want to change
+      description: Partial update — omit fields you do not want to change. At least one field is required.
+      minProperties: 1
       properties:
         photo:
           type: string
@@ -335,16 +336,16 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 80
+          maximum: 100
           example: 15
         quantity:
           type: integer
-          minimum: 1
+          minimum: 0
           example: 30
         category:
           type: string
           nullable: true
-          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
+          maxLength: 100
           example: Electronics
 
     ToggleStatusResponse:
@@ -381,6 +382,7 @@ paths:
     post:
       tags: [Auth]
       summary: Register a new user
+      security: []
       requestBody:
         required: true
         content:
@@ -415,6 +417,7 @@ paths:
     post:
       tags: [Auth]
       summary: Authenticate and receive a JWT
+      security: []
       requestBody:
         required: true
         content:
@@ -799,6 +802,7 @@ paths:
     get:
       tags: [Products]
       summary: List active products (public)
+      security: []
       description: Returns only products with status=active. Supports filters and pagination.
       parameters:
         - name: category
@@ -810,26 +814,32 @@ paths:
           in: query
           schema:
             type: number
+            minimum: 0
           example: 10.00
         - name: max_price
           in: query
+          description: Must be greater than or equal to min_price
           schema:
             type: number
+            minimum: 0
           example: 500.00
         - name: search
           in: query
-          description: Case-insensitive match against product title
+          description: Case-insensitive substring match against the title. `%` and `_` match literally.
           schema:
             type: string
           example: headphone
         - name: limit
           in: query
+          description: Values below 1 fall back to 20; values above 100 are capped at 100.
           schema:
             type: integer
             default: 20
+            maximum: 100
           example: 20
         - name: offset
           in: query
+          description: Negative values are treated as 0.
           schema:
             type: integer
             default: 0
@@ -860,6 +870,12 @@ paths:
                   total: 1
                   limit: 20
                   offset: 0
+        '400':
+          description: Invalid query parameters (wrong type, negative price or min_price greater than max_price)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
     post:
       tags: [Products]
@@ -903,13 +919,13 @@ paths:
                     error: price must be greater than 0
                 price_too_high:
                   value:
-                    error: price must not exceed 1,000,000
+                    error: price must not exceed 1000000
                 invalid_discount:
                   value:
-                    error: discount_percentage must be between 0 and 80
+                    error: discount_percentage must be between 0 and 100
                 invalid_quantity:
                   value:
-                    error: quantity must be at least 1
+                    error: quantity must be greater than or equal to 0
         '401':
           description: Token missing or invalid
           content:
@@ -921,6 +937,7 @@ paths:
     get:
       tags: [Products]
       summary: Get product by ID (public)
+      security: []
       parameters:
         - name: id
           in: path
@@ -978,7 +995,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Product'
         '400':
-          description: Invalid field values
+          description: Invalid product ID or field values, or no field provided
           content:
             application/json:
               schema:
@@ -1021,6 +1038,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeleteResponse'
+        '400':
+          description: Invalid product ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Token missing or invalid
           content:

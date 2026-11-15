@@ -59,14 +59,17 @@ CREATE INDEX idx_products_category  ON products(category);
 
 **BR-PROD-001 — List products**
 - Returns only `status = active` products
-- Query params (all optional): `category`, `min_price`, `max_price`, `search` (matches title, case-insensitive)
-- Response includes `final_price = price * (1 - discount_percentage / 100)` as computed field
+- Query params (all optional): `category`, `min_price`, `max_price`, `search` (matches title, case-insensitive; `%` and `_` match literally)
+- Pagination: `limit` (default 20, capped at 100) and `offset` (default 0); response has `data` and `meta { total, limit, offset }`
+- `min_price`/`max_price` must be >= 0 and `min_price <= max_price` → `ErrBadRequest` (400)
+- Response includes `final_price = price * (1 - discount_percentage / 100)`, rounded to 2 decimals, as computed field (`domain.Product.FinalPrice`)
 
 **BR-PROD-002 — Get product by ID**
 - `ErrNotFound` (404) if not found or `status = inactive`
 
 **BR-PROD-003 — Create product**
-- Required: `title`, `price` (> 0), `quantity` (>= 0)
+- Required: `title` (max 255 chars), `price` (> 0, max 1,000,000), `quantity` (>= 0)
+- `category` max 100 chars
 - Optional: `photo`, `description`, `category`, `discount_percentage` (0–100, defaults to 0)
 - `seller_id` is injected from JWT — not accepted from request body
 - Default `status`: `active`
@@ -75,7 +78,8 @@ CREATE INDEX idx_products_category  ON products(category);
 **BR-PROD-004 — Update product (partial)**
 - Only owner (`seller_id = current_user_id`) can edit → `ErrForbidden` (403)
 - `ErrNotFound` (404) if product does not exist
-- `price` must be > 0 if provided → `ErrBadRequest` (400)
+- At least one field must be provided → `ErrBadRequest` (400)
+- `price` must be > 0 and at most 1,000,000 if provided → `ErrBadRequest` (400)
 - `discount_percentage` must be 0–100 if provided → `ErrBadRequest` (400)
 - `quantity` must be >= 0 if provided → `ErrBadRequest` (400)
 - `seller_id` is ignored even if sent in body
@@ -95,15 +99,16 @@ CREATE INDEX idx_products_category  ON products(category);
 
 ## Implementation Checklist
 
-- [ ] Migration SQL — create `products` table + indexes
-- [ ] `internal/product/domain/product.go` — update existing struct to match full entity
-- [ ] `internal/product/shared/repository.go` — `FindAll` (with filters), `FindById`, `Create`, `Update`, `Delete`, `HasActiveOrders`
-- [ ] `internal/product/features/list_products/` — handler, usecase, ports, dtos
-- [ ] `internal/product/features/get_product/` — handler, usecase, ports, dtos
-- [ ] `internal/product/features/create_product/` — handler, usecase, ports, dtos
-- [ ] `internal/product/features/update_product/` — handler, usecase, ports, dtos
-- [ ] `internal/product/features/toggle_status/` — handler, usecase, ports, dtos
-- [ ] `internal/product/features/delete_product/` — handler, usecase, ports, dtos
-- [ ] `internal/product/routes.go` — map all routes
-- [ ] Wire in `internal/app/setup/setup.go` and `internal/app/route/routes.go`
-- [ ] Manual test: create → list → filter → update → toggle → delete (check conflict guard)
+- [x] Migration SQL — `db/migrations/002_create_products.sql` (`products` table + indexes)
+- [x] `internal/product/domain/product.go` — full entity, `FinalPrice()`; field rules in `domain/rules.go`
+- [x] `internal/product/shared/repository.go` — `FindAll` (with filters), `FindByID`, `Create`, `Update`, `UpdateStatus`, `Delete`, `HasActiveOrders`; takes `context.Context` and a `DBTX` (`*sql.DB` or `*sql.Tx`)
+- [x] `internal/product/features/list_products/` — handler, usecase, ports, dtos, tests
+- [x] `internal/product/features/get_product/` — handler, usecase, ports, dtos, tests
+- [x] `internal/product/features/create_product/` — handler, usecase, ports, dtos, tests
+- [x] `internal/product/features/update_product/` — handler, usecase, ports, dtos, tests
+- [x] `internal/product/features/toggle_status/` — handler, usecase, ports, dtos, tests
+- [x] `internal/product/features/delete_product/` — handler, usecase, ports, dtos, tests
+- [x] `internal/product/routes.go` — map all routes
+- [x] Wire in `internal/app/setup/setup.go` and `internal/app/route/routes.go`
+- [x] Manual test: create → list → filter → update → toggle → delete (check conflict guard)
+- [ ] Activity log events (`product_created`, `product_updated`, `product_deleted`) — module 06, via the outbox
