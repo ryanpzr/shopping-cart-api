@@ -9,11 +9,26 @@ import (
 
 // Field limits from sdd/specs/modules/03-product.md.
 const (
-	MaxPrice          = 1_000_000.00
-	MaxDiscount       = 100
-	MaxTitleLength    = 255
-	MaxCategoryLength = 100
+	MaxPrice       = 1_000_000.00 // guards against input errors and abuse
+	MaxDiscount    = 80           // the marketplace keeps a minimum margin
+	MaxTitleLength = 255
 )
+
+// Categories is the fixed product catalog taxonomy (exact, case-sensitive match).
+var Categories = []string{
+	"Electronics",
+	"Clothing",
+	"Books",
+	"Home & Garden",
+	"Sports",
+	"Beauty",
+	"Toys",
+	"Food & Beverages",
+	"Health",
+	"Automotive",
+	"Music & Movies",
+	"Office Supplies",
+}
 
 func ValidateTitle(title string) error {
 	if strings.TrimSpace(title) == "" {
@@ -37,7 +52,7 @@ func ValidatePrice(price float64) error {
 
 func ValidateDiscount(discount int) error {
 	if discount < 0 || discount > MaxDiscount {
-		return apperrors.NewBadRequest("discount_percentage must be between 0 and 100")
+		return apperrors.NewBadRequest(fmt.Sprintf("discount_percentage must be between 0 and %d", MaxDiscount))
 	}
 	return nil
 }
@@ -49,9 +64,15 @@ func ValidateQuantity(quantity int) error {
 	return nil
 }
 
+// ValidateCategory accepts nil (no category) or one of Categories.
 func ValidateCategory(category *string) error {
-	if category != nil && len([]rune(*category)) > MaxCategoryLength {
-		return apperrors.NewBadRequest(fmt.Sprintf("category must be at most %d characters", MaxCategoryLength))
+	if category == nil {
+		return nil
 	}
-	return nil
+	for _, c := range Categories {
+		if *category == c {
+			return nil
+		}
+	}
+	return apperrors.NewBadRequest("category must be one of: " + strings.Join(Categories, ", "))
 }

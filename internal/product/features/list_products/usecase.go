@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
@@ -59,7 +60,7 @@ func validate(req ListRequest) error {
 	if req.MinPrice != nil && req.MaxPrice != nil && *req.MinPrice > *req.MaxPrice {
 		return apperrors.NewBadRequest("min_price must not be greater than max_price")
 	}
-	return nil
+	return domain.ValidateCategory(nonBlank(req.Category))
 }
 
 // paginate applies the same rules as the admin user listing:

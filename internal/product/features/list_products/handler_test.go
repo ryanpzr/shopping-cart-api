@@ -32,11 +32,11 @@ func list(uc listproducts.Usecase, url string) *httptest.ResponseRecorder {
 func TestListHandler_BindsQueryParams(t *testing.T) {
 	uc := new(mockUsecase)
 	uc.On("List", mock.Anything, mock.MatchedBy(func(r listproducts.ListRequest) bool {
-		return *r.Category == "books" && *r.MinPrice == 10 && *r.MaxPrice == 99.9 &&
+		return *r.Category == "Home & Garden" && *r.MinPrice == 10 && *r.MaxPrice == 99.9 &&
 			*r.Search == "go" && r.Limit == 5 && r.Offset == 10
 	})).Return(listproducts.ListResponse{Data: []listproducts.ProductResponse{}}, nil)
 
-	w := list(uc, "/products?category=books&min_price=10&max_price=99.9&search=go&limit=5&offset=10")
+	w := list(uc, "/products?category=Home+%26+Garden&min_price=10&max_price=99.9&search=go&limit=5&offset=10")
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	uc.AssertExpectations(t)

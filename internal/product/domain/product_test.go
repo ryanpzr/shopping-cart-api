@@ -64,9 +64,9 @@ func TestValidatePrice(t *testing.T) {
 
 func TestValidateDiscount(t *testing.T) {
 	require.NoError(t, domain.ValidateDiscount(0))
-	require.NoError(t, domain.ValidateDiscount(100))
+	require.NoError(t, domain.ValidateDiscount(80))
 	assertBadRequest(t, domain.ValidateDiscount(-1))
-	assertBadRequest(t, domain.ValidateDiscount(101))
+	assertBadRequest(t, domain.ValidateDiscount(81))
 }
 
 func TestValidateQuantity(t *testing.T) {
@@ -76,9 +76,11 @@ func TestValidateQuantity(t *testing.T) {
 }
 
 func TestValidateCategory(t *testing.T) {
-	long := strings.Repeat("c", domain.MaxCategoryLength+1)
 	require.NoError(t, domain.ValidateCategory(nil))
-	ok := "books"
-	require.NoError(t, domain.ValidateCategory(&ok))
-	assertBadRequest(t, domain.ValidateCategory(&long))
+	for _, c := range domain.Categories {
+		require.NoError(t, domain.ValidateCategory(&c), c)
+	}
+	for _, c := range []string{"books", "BOOKS", " Books", "Weapons", ""} {
+		assertBadRequest(t, domain.ValidateCategory(&c))
+	}
 }

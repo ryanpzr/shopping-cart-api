@@ -73,7 +73,8 @@ func TestUpdate_ValidationErrors(t *testing.T) {
 		{"blank title", updateproduct.UpdateRequest{Title: ptr(" ")}},
 		{"zero price", updateproduct.UpdateRequest{Price: ptr(0.0)}},
 		{"price above limit", updateproduct.UpdateRequest{Price: ptr(2_000_000.0)}},
-		{"discount above 100", updateproduct.UpdateRequest{DiscountPercentage: ptr(150)}},
+		{"discount above 80", updateproduct.UpdateRequest{DiscountPercentage: ptr(81)}},
+		{"unknown category", updateproduct.UpdateRequest{Category: ptr("books")}},
 		{"negative quantity", updateproduct.UpdateRequest{Quantity: ptr(-3)}},
 	}
 	for _, tt := range tests {

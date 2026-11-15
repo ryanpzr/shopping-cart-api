@@ -37,15 +37,15 @@ func TestCreate_Success(t *testing.T) {
 	repo := new(mocks.Repository)
 	req := validRequest()
 	req.DiscountPercentage = ptr(25)
-	req.Category = ptr("electronics")
+	req.Category = ptr("Electronics")
 
 	repo.On("Create", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
 		return p.SellerID == 7 && p.Title == "Mechanical keyboard" && p.Price == 200 &&
 			p.DiscountPercentage == 25 && p.Quantity == 5 && p.Status == domain.StatusActive &&
-			*p.Category == "electronics"
+			*p.Category == "Electronics"
 	})).Return(domain.Product{
 		ID: 1, SellerID: 7, Title: "Mechanical keyboard", Price: 200,
-		DiscountPercentage: 25, Quantity: 5, Status: domain.StatusActive, Category: ptr("electronics"),
+		DiscountPercentage: 25, Quantity: 5, Status: domain.StatusActive, Category: ptr("Electronics"),
 	}, nil)
 
 	resp, err := createproduct.NewUsecase(repo).Create(context.Background(), 7, req)
@@ -89,8 +89,8 @@ func TestCreate_ValidationErrors(t *testing.T) {
 		{"missing quantity", func(r *createproduct.CreateRequest) { r.Quantity = nil }},
 		{"negative quantity", func(r *createproduct.CreateRequest) { r.Quantity = ptr(-1) }},
 		{"negative discount", func(r *createproduct.CreateRequest) { r.DiscountPercentage = ptr(-1) }},
-		{"discount above 100", func(r *createproduct.CreateRequest) { r.DiscountPercentage = ptr(101) }},
-		{"category too long", func(r *createproduct.CreateRequest) { r.Category = ptr(strings.Repeat("c", 101)) }},
+		{"discount above 80", func(r *createproduct.CreateRequest) { r.DiscountPercentage = ptr(81) }},
+		{"unknown category", func(r *createproduct.CreateRequest) { r.Category = ptr("Weapons") }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -48,7 +48,7 @@ func TestList_EmptyResultIsEmptyArray(t *testing.T) {
 func TestList_PassesTrimmedFilters(t *testing.T) {
 	repo := new(mocks.Repository)
 	want := shared.ProductFilters{
-		Category: ptr("books"),
+		Category: ptr("Books"),
 		MinPrice: ptr(10.0),
 		MaxPrice: ptr(50.0),
 		Search:   ptr("go"),
@@ -56,7 +56,7 @@ func TestList_PassesTrimmedFilters(t *testing.T) {
 	repo.On("FindAll", mock.Anything, want, 20, 0).Return([]domain.Product{}, 0, nil)
 
 	_, err := listproducts.NewUsecase(repo).List(context.Background(), listproducts.ListRequest{
-		Category: ptr(" books "), MinPrice: ptr(10.0), MaxPrice: ptr(50.0), Search: ptr("  go "),
+		Category: ptr(" Books "), MinPrice: ptr(10.0), MaxPrice: ptr(50.0), Search: ptr("  go "),
 	})
 
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestList_Pagination(t *testing.T) {
 	}
 }
 
-func TestList_InvalidPriceRange(t *testing.T) {
+func TestList_InvalidFilters(t *testing.T) {
 	tests := []struct {
 		name string
 		req  listproducts.ListRequest
@@ -111,6 +111,7 @@ func TestList_InvalidPriceRange(t *testing.T) {
 		{"negative min", listproducts.ListRequest{MinPrice: ptr(-1.0)}},
 		{"negative max", listproducts.ListRequest{MaxPrice: ptr(-1.0)}},
 		{"min above max", listproducts.ListRequest{MinPrice: ptr(50.0), MaxPrice: ptr(10.0)}},
+		{"unknown category", listproducts.ListRequest{Category: ptr("books")}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
