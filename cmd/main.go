@@ -11,7 +11,8 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	// .env is optional: in containers the variables come from the environment.
+	_ = godotenv.Load()
 
 	if err := jwtutil.ValidateSecret(); err != nil {
 		log.Fatalf("Invalid configuration: %v", err)

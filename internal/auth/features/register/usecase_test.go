@@ -1,7 +1,6 @@
 package register_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -43,7 +42,7 @@ func (m *mockUserRepo) UpdateStatus(id int, status string, t *time.Time) (domain
 }
 
 func TestRegisterUsecase_Success(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	repo := new(mockUserRepo)
 	repo.On("FindByEmail", "new@example.com").Return(nil, apperrors.NewNotFound("not found"))

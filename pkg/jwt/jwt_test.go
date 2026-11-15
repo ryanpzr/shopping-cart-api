@@ -1,7 +1,6 @@
 package jwtutil_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 )
 
 func TestGenerate_Parse_Success(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	token, err := jwtutil.Generate(1, "client", "test@example.com")
 	require.NoError(t, err)
@@ -28,18 +27,18 @@ func TestGenerate_Parse_Success(t *testing.T) {
 }
 
 func TestParse_InvalidToken(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	_, err := jwtutil.Parse("invalid.token.string")
 	assert.Error(t, err)
 }
 
 func TestParse_WrongSecret(t *testing.T) {
-	os.Setenv("JWT_SECRET", "secret-a")
+	t.Setenv("JWT_SECRET", "secret-a")
 	token, err := jwtutil.Generate(1, "client", "test@example.com")
 	require.NoError(t, err)
 
-	os.Setenv("JWT_SECRET", "secret-b")
+	t.Setenv("JWT_SECRET", "secret-b")
 	_, err = jwtutil.Parse(token)
 	assert.Error(t, err)
 }
