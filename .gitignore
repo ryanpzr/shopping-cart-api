@@ -3,9 +3,6 @@
 .env.*
 !.env.example
 
-# Database migrations (managed separately)
-db/migrations/
-
 # Claude Code
 .claude/
 
