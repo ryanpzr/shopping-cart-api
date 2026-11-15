@@ -12,6 +12,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U root -d shopping_cart']
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   backend:
     build:
@@ -25,10 +30,12 @@ services:
       DB_PASSWORD: 12345
       DB_NAME: shopping_cart
       DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - copy .env.example to .env and set it}
     ports:
       - '8080:8080'
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 volumes:
   postgres_data:
     driver: local

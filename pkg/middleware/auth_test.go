@@ -3,7 +3,6 @@ package middleware_test
 import (
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +31,7 @@ func TestAuth_MissingHeader(t *testing.T) {
 }
 
 func TestAuth_InvalidToken(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 	r := newProtectedRouter()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodGet, "/protected", nil)
@@ -42,7 +41,7 @@ func TestAuth_InvalidToken(t *testing.T) {
 }
 
 func TestAuth_ValidToken(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 	token, _ := jwtutil.Generate(42, "client", "user@example.com")
 
 	r := newProtectedRouter()
@@ -64,7 +63,7 @@ func newRoleRouter(allowedRoles ...string) *gin.Engine {
 }
 
 func TestRequireRole_Allowed(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 	token, _ := jwtutil.Generate(1, "admin", "admin@example.com")
 
 	r := newRoleRouter("admin")
@@ -77,7 +76,7 @@ func TestRequireRole_Allowed(t *testing.T) {
 }
 
 func TestRequireRole_Forbidden(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 	token, _ := jwtutil.Generate(1, "client", "user@example.com")
 
 	r := newRoleRouter("admin")

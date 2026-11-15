@@ -1,7 +1,6 @@
 package login_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -51,7 +50,7 @@ func hashedPassword(t *testing.T, pwd string) string {
 }
 
 func TestLoginUsecase_Success(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	repo := new(mockUserRepo)
 	repo.On("FindByEmail", "user@example.com").Return(&domain.User{
@@ -135,7 +134,7 @@ func TestLoginUsecase_ActiveTimeout(t *testing.T) {
 }
 
 func TestLoginUsecase_ExpiredTimeout(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 	past := time.Now().Add(-1 * time.Hour)
 	repo := new(mockUserRepo)
 	repo.On("FindByEmail", "expired@example.com").Return(&domain.User{

@@ -7,10 +7,16 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/ryanpzr/shopping-cart-api/config/pg"
 	"github.com/ryanpzr/shopping-cart-api/internal/app/setup"
+	jwtutil "github.com/ryanpzr/shopping-cart-api/pkg/jwt"
 )
 
 func main() {
-	godotenv.Load()
+	// .env is optional: in containers the variables come from the environment.
+	_ = godotenv.Load()
+
+	if err := jwtutil.ValidateSecret(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
 
 	r := gin.Default()
 	api := r.Group("/api/v1")

@@ -1,7 +1,6 @@
 package register_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -31,7 +30,7 @@ func (m *mockUserRepo) Create(user domain.User) (domain.User, error) {
 	return args.Get(0).(domain.User), args.Error(1)
 }
 
-func (m *mockUserRepo) FindByID(id int) (*domain.User, error)       { return nil, nil }
+func (m *mockUserRepo) FindByID(id int) (*domain.User, error) { return nil, nil }
 func (m *mockUserRepo) FindAll(limit, offset int) ([]domain.User, int, error) {
 	return nil, 0, nil
 }
@@ -43,7 +42,7 @@ func (m *mockUserRepo) UpdateStatus(id int, status string, t *time.Time) (domain
 }
 
 func TestRegisterUsecase_Success(t *testing.T) {
-	os.Setenv("JWT_SECRET", "test-secret")
+	t.Setenv("JWT_SECRET", "test-secret")
 
 	repo := new(mockUserRepo)
 	repo.On("FindByEmail", "new@example.com").Return(nil, apperrors.NewNotFound("not found"))

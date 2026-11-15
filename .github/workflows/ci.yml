@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.6.1
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: shopping_cart
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: '12345'
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d shopping_cart"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migrations in order
+        env:
+          PGPASSWORD: '12345'
+        run: |
+          for f in $(ls db/migrations/*.sql | sort); do
+            echo "Applying $f"
+            psql -v ON_ERROR_STOP=1 -h localhost -U root -d shopping_cart -f "$f"
+          done
+
+      - name: Show schema
+        env:
+          PGPASSWORD: '12345'
+        run: psql -h localhost -U root -d shopping_cart -c '\dt'

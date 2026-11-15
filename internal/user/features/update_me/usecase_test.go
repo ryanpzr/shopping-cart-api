@@ -29,7 +29,7 @@ func (m *mockRepo) FindByEmail(email string) (*domain.User, error) {
 	}
 	return args.Get(0).(*domain.User), args.Error(1)
 }
-func (m *mockRepo) Create(u domain.User) (domain.User, error) { return domain.User{}, nil }
+func (m *mockRepo) Create(u domain.User) (domain.User, error)             { return domain.User{}, nil }
 func (m *mockRepo) FindAll(limit, offset int) ([]domain.User, int, error) { return nil, 0, nil }
 func (m *mockRepo) UpdateProfile(id int, name, email string) (domain.User, error) {
 	args := m.Called(id, name, email)

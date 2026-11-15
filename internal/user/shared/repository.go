@@ -79,7 +79,7 @@ func (r *repository) FindAll(limit, offset int) ([]domain.User, int, error) {
 	if err != nil {
 		return nil, 0, apperrors.NewInternalServer(err.Error())
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var users []domain.User
 	for rows.Next() {

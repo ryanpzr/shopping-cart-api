@@ -18,9 +18,9 @@ func (m *mockRepo) FindAll(limit, offset int) ([]domain.User, int, error) {
 	args := m.Called(limit, offset)
 	return args.Get(0).([]domain.User), args.Int(1), args.Error(2)
 }
-func (m *mockRepo) FindByID(id int) (*domain.User, error)                { return nil, nil }
-func (m *mockRepo) FindByEmail(email string) (*domain.User, error)       { return nil, nil }
-func (m *mockRepo) Create(u domain.User) (domain.User, error)            { return domain.User{}, nil }
+func (m *mockRepo) FindByID(id int) (*domain.User, error)          { return nil, nil }
+func (m *mockRepo) FindByEmail(email string) (*domain.User, error) { return nil, nil }
+func (m *mockRepo) Create(u domain.User) (domain.User, error)      { return domain.User{}, nil }
 func (m *mockRepo) UpdateProfile(id int, name, email string) (domain.User, error) {
 	return domain.User{}, nil
 }

@@ -1,5 +1,7 @@
 # Shopping Cart API
 
+[![CI](https://github.com/ryanpzr/shopping-cart-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ryanpzr/shopping-cart-api/actions/workflows/ci.yml)
+
 REST API for a shopping cart system built with Go and Gin. Handles authentication, user management, product management, cart, and orders.
 
 ## Tech Stack
@@ -48,11 +50,14 @@ db/migrations/   # SQL migration files
 
 ### Environment Variables
 
-Create a `.env` file at the project root:
+Copy the example file and set a secret:
 
-```env
-JWT_SECRET=your_secret_key_here
+```bash
+cp .env.example .env
+# then set JWT_SECRET, e.g. with: openssl rand -base64 48
 ```
+
+`JWT_SECRET` is **required** — the API refuses to start without it, and `docker-compose` fails with an explicit message if it is missing.
 
 The database connection is configured in `docker-compose.yml`. For local development, the defaults work out of the box — no changes needed.
 
@@ -66,7 +71,7 @@ docker-compose down -v && docker-compose up --build
 docker-compose up --build
 ```
 
-> The database migration runs automatically on first startup via `initdb.d`. To re-run it, bring the volume down with `docker-compose down -v`.
+> Migrations in `db/migrations/` run automatically, in file order, on the first startup of the database (via `docker-entrypoint-initdb.d`). The backend waits for the database healthcheck before starting. To re-run migrations, reset the volume with `docker-compose down -v`.
 
 The API will be available at `http://localhost:8080`.
 
@@ -431,6 +436,8 @@ go test ./...
 ```
 
 Tests use `testify` with mocked dependencies — no database connection required.
+
+Every push and pull request runs the [CI workflow](.github/workflows/ci.yml): `gofmt`, `go vet`, build, race-enabled tests, `golangci-lint`, and a job that applies all migrations to a real PostgreSQL 16 instance.
 
 ---
 
