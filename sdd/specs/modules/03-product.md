@@ -52,6 +52,7 @@ CREATE INDEX idx_products_category  ON products(category);
 |---|---|---|
 | `discount_percentage` | 0–80 | The marketplace keeps a minimum margin |
 | `price` | > 0 and <= 1,000,000 | Guards against input errors and abuse |
+| `quantity` | >= 0 | 0 means sold out: checkout can bring stock to 0 and sellers can set it; buying is blocked by the cart stock check (`ErrConflict`) |
 
 ## Categories
 
