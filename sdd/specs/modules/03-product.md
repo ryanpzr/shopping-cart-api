@@ -16,10 +16,10 @@
 | title | VARCHAR(255) | NOT NULL |
 | description | TEXT | nullable |
 | price | NUMERIC(10,2) | NOT NULL, > 0 |
-| discount_percentage | INTEGER | NOT NULL, DEFAULT 0, 0–100 |
+| discount_percentage | INTEGER | NOT NULL, DEFAULT 0, 0–80 |
 | quantity | INTEGER | NOT NULL, DEFAULT 0, >= 0 |
 | status | VARCHAR(10) | `active` / `inactive`, DEFAULT `active` |
-| category | VARCHAR(100) | nullable |
+| category | VARCHAR(100) | nullable; one of the catalog categories (validated in the domain) |
 | created_at | TIMESTAMPTZ | DEFAULT NOW() |
 | updated_at | TIMESTAMPTZ | DEFAULT NOW() |
 
@@ -33,7 +33,7 @@ CREATE TABLE products (
     title                VARCHAR(255)  NOT NULL,
     description          TEXT,
     price                NUMERIC(10,2) NOT NULL CHECK (price > 0),
-    discount_percentage  INTEGER       NOT NULL DEFAULT 0 CHECK (discount_percentage >= 0 AND discount_percentage <= 100),
+    discount_percentage  INTEGER       NOT NULL DEFAULT 0 CHECK (discount_percentage >= 0 AND discount_percentage <= 80),
     quantity             INTEGER       NOT NULL DEFAULT 0 CHECK (quantity >= 0),
     status               VARCHAR(10)   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     category             VARCHAR(100),
@@ -45,6 +45,22 @@ CREATE INDEX idx_products_seller_id ON products(seller_id);
 CREATE INDEX idx_products_status    ON products(status);
 CREATE INDEX idx_products_category  ON products(category);
 ```
+
+## Business Limits
+
+| Rule | Value | Reason |
+|---|---|---|
+| `discount_percentage` | 0–80 | The marketplace keeps a minimum margin |
+| `price` | > 0 and <= 1,000,000 | Guards against input errors and abuse |
+
+## Categories
+
+Fixed catalog taxonomy (`domain.Categories`), matched exactly and case-sensitively:
+`Electronics`, `Clothing`, `Books`, `Home & Garden`, `Sports`, `Beauty`, `Toys`,
+`Food & Beverages`, `Health`, `Automotive`, `Music & Movies`, `Office Supplies`.
+
+The list lives in the domain, not in a database `CHECK`, so adding a category is a code change
+without a migration.
 
 ## Endpoints
 
@@ -61,7 +77,7 @@ CREATE INDEX idx_products_category  ON products(category);
 - Returns only `status = active` products
 - Query params (all optional): `category`, `min_price`, `max_price`, `search` (matches title, case-insensitive; `%` and `_` match literally)
 - Pagination: `limit` (default 20, capped at 100) and `offset` (default 0); response has `data` and `meta { total, limit, offset }`
-- `min_price`/`max_price` must be >= 0 and `min_price <= max_price` → `ErrBadRequest` (400)
+- `min_price`/`max_price` must be >= 0 and `min_price <= max_price`; `category` must be a catalog category → `ErrBadRequest` (400)
 - Response includes `final_price = price * (1 - discount_percentage / 100)`, rounded to 2 decimals, as computed field (`domain.Product.FinalPrice`)
 
 **BR-PROD-002 — Get product by ID**
@@ -69,8 +85,8 @@ CREATE INDEX idx_products_category  ON products(category);
 
 **BR-PROD-003 — Create product**
 - Required: `title` (max 255 chars), `price` (> 0, max 1,000,000), `quantity` (>= 0)
-- `category` max 100 chars
-- Optional: `photo`, `description`, `category`, `discount_percentage` (0–100, defaults to 0)
+- `category` optional; if provided, must be one of the catalog categories (see Categories) → `ErrBadRequest` (400)
+- Optional: `photo`, `description`, `category`, `discount_percentage` (0–80, defaults to 0)
 - `seller_id` is injected from JWT — not accepted from request body
 - Default `status`: `active`
 - Emits `product_created` activity log event
@@ -80,7 +96,7 @@ CREATE INDEX idx_products_category  ON products(category);
 - `ErrNotFound` (404) if product does not exist
 - At least one field must be provided → `ErrBadRequest` (400)
 - `price` must be > 0 and at most 1,000,000 if provided → `ErrBadRequest` (400)
-- `discount_percentage` must be 0–100 if provided → `ErrBadRequest` (400)
+- `discount_percentage` must be 0–80 if provided → `ErrBadRequest` (400)
 - `quantity` must be >= 0 if provided → `ErrBadRequest` (400)
 - `seller_id` is ignored even if sent in body
 - Emits `product_updated` activity log event

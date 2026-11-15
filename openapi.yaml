@@ -227,7 +227,7 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 100
+          maximum: 80
           example: 10
         final_price:
           type: number
@@ -245,7 +245,7 @@ components:
         category:
           type: string
           nullable: true
-          maxLength: 100
+          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
         created_at:
           type: string
@@ -298,7 +298,7 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 100
+          maximum: 80
           default: 0
           example: 10
         quantity:
@@ -308,7 +308,7 @@ components:
         category:
           type: string
           nullable: true
-          maxLength: 100
+          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
 
     UpdateProductRequest:
@@ -336,7 +336,7 @@ components:
         discount_percentage:
           type: integer
           minimum: 0
-          maximum: 100
+          maximum: 80
           example: 15
         quantity:
           type: integer
@@ -345,7 +345,7 @@ components:
         category:
           type: string
           nullable: true
-          maxLength: 100
+          enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
 
     ToggleStatusResponse:
@@ -809,6 +809,7 @@ paths:
           in: query
           schema:
             type: string
+            enum: [Electronics, Clothing, Books, "Home & Garden", Sports, Beauty, Toys, "Food & Beverages", Health, Automotive, "Music & Movies", "Office Supplies"]
           example: Electronics
         - name: min_price
           in: query
@@ -922,7 +923,7 @@ paths:
                     error: price must not exceed 1000000
                 invalid_discount:
                   value:
-                    error: discount_percentage must be between 0 and 100
+                    error: discount_percentage must be between 0 and 80
                 invalid_quantity:
                   value:
                     error: quantity must be greater than or equal to 0
