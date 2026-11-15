@@ -62,7 +62,7 @@
 
 **BR-ADMIN-006 — Activity history**
 - Returns paginated activity log for the given user
-- Implemented here but reads from `activity_logs` table created in `06-activity-log`
+- Implemented here but reads from the MongoDB `activity_logs` collection fed asynchronously by `06-activity-log` (outbox + CDC + Kafka) — eventually consistent
 - Event types: `login`, `product_created`, `product_updated`, `product_deleted`, `order_placed`, `order_cancelled`, `cart_checkout`
 
 > ⚠️ STUB — implementado em `internal/user/features/admin_activity_log/` retornando lista vazia paginada.
