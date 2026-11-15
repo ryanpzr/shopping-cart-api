@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS products (
     title                VARCHAR(255)  NOT NULL,
     description          TEXT,
     price                NUMERIC(10,2) NOT NULL CHECK (price > 0),
-    discount_percentage  INTEGER       NOT NULL DEFAULT 0 CHECK (discount_percentage >= 0 AND discount_percentage <= 100),
+    discount_percentage  INTEGER       NOT NULL DEFAULT 0 CHECK (discount_percentage >= 0 AND discount_percentage <= 80),
     quantity             INTEGER       NOT NULL DEFAULT 0 CHECK (quantity >= 0),
     status               VARCHAR(10)   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     category             VARCHAR(100),
