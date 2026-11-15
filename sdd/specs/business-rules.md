@@ -9,7 +9,7 @@ Marketplace-style shopping cart API. Reference this document before implementing
 | Entity | Fields |
 |---|---|
 | **User** | id, name, email, password_hash, role (`admin`/`client`), status (`active`/`banned`/`timeout`), timeout_until, created_at, updated_at |
-| **Product** | id, seller_id (FK User), photo, title, description, price, discount_percentage (0–100), quantity, status (`active`/`inactive`), category, created_at, updated_at |
+| **Product** | id, seller_id (FK User), photo, title, description, price, discount_percentage (0–80), quantity, status (`active`/`inactive`), category, created_at, updated_at |
 | **Cart** | id, buyer_id (FK User), status (`active`/`checked_out`), created_at, updated_at |
 | **CartItem** | id, cart_id, product_id, quantity, price_snapshot, created_at |
 | **Order** | id, cart_id, buyer_id, total_price, status (`pending`/`paid`/`shipped`/`delivered`/`cancelled`), created_at, updated_at |
@@ -95,20 +95,23 @@ Marketplace-style shopping cart API. Reference this document before implementing
 **BR-PROD-001 — List products**
 - Returns only `status = active` products
 - Supports query filters: `category`, `min_price`, `max_price`, `search` (matches title)
+- Paginated with `limit` (default 20, max 100) and `offset`
+- `final_price = price * (1 - discount_percentage / 100)`, rounded to 2 decimals
 
 **BR-PROD-002 — Get product by ID**
 - `ErrNotFound` if not found or `status ≠ active`
 
 **BR-PROD-003 — Create product**
-- Required: `title`, `price` (> 0), `quantity` (>= 0)
-- Optional: `photo`, `description`, `category`, `discount_percentage` (0–100)
+- Required: `title` (max 255 chars), `price` (> 0, max 1,000,000), `quantity` (>= 0)
+- Optional: `photo`, `description`, `category` (one of the fixed catalog categories), `discount_percentage` (0–80, to keep a minimum margin)
 - `seller_id` is set from the authenticated user's token (not from request body)
 - Default `status`: `active`
 
 **BR-PROD-004 — Update product (partial)**
 - Only the owner can edit → `ErrForbidden`
-- `price` must be > 0 if provided
-- `discount_percentage` must be 0–100 if provided
+- At least one field must be provided
+- `price` must be > 0 and at most 1,000,000 if provided
+- `discount_percentage` must be 0–80 if provided
 - `quantity` must be >= 0 if provided
 - `seller_id` cannot be changed
 

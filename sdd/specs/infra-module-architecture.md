@@ -165,7 +165,22 @@ type AppError struct {
 | `NewTooManyRequests(msg)` | 429 | Rate limiting |
 | `NewInternalServer(msg)` | 500 | Unexpected failures |
 
-**Rule:** always pass a specific, context-aware message. Never use `NewInternalServer("error")` — pass `err.Error()` or a meaningful description.
+**Rule:** always pass a specific, context-aware message. Never use `NewInternalServer("error")` — pass `err.Error()` or a meaningful description. `HandleError` logs 5xx messages and answers the client with a generic `internal server error`, so internal details never leak.
+
+### Layer responsibilities
+
+**The repository only talks to the database and returns the result (or the error) to the usecase. Handling that error is the usecase's job.**
+
+| Layer | Does | Does not |
+|---|---|---|
+| `domain/` | Entity, business rules (`Validate()`), domain errors: sentinels such as `ErrProductNotFound` and `*ValidationError` | Import `apperrors` or know HTTP status codes |
+| `shared/` (repository) | Run SQL with the filters and parameters it receives; return `domain.Err...NotFound` for "no rows"; wrap other errors with context (`fmt.Errorf("product repository: find by id: %w", err)`) | Import `apperrors`; hard-code business rules in SQL (visibility, which statuses count, how a partial update merges) |
+| usecase | Apply business rules; pass rule values to the repository (e.g. `Status: active`, `domain.ActiveOrderStatuses`); load → change → validate → save; map errors with `errors.Is`/`errors.As` to `apperrors` | Build SQL |
+| handler | Bind and parse input; call the usecase; `apperrors.HandleError` | Business rules |
+
+Dependencies that do not exist yet (e.g. orders before module 05) are injected as explicit stubs in `setup.go` (`shared.NoOrders`), not detected at runtime by the repository.
+
+> The `product` module follows this pattern. The `user` module still returns `apperrors` from its repository and will be migrated separately.
 
 ### Handling in handlers
 
@@ -196,7 +211,7 @@ func (h *handler) Create(c *gin.Context) {
 **Rules:**
 - `c.JSON(...)` is only used for **success** responses
 - All error paths go through `apperrors.HandleError` — never `c.JSON` directly for errors
-- Return `*apperrors.AppError` from usecases and repositories — never `fmt.Errorf` or raw strings for domain errors
+- Usecases return `*apperrors.AppError`; repositories and the domain return domain errors or wrapped errors (see *Layer responsibilities*)
 
 ---
 
