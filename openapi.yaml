@@ -313,7 +313,10 @@ components:
 
     UpdateProductRequest:
       type: object
-      description: Partial update — omit fields you do not want to change. At least one field is required.
+      description: >-
+        Partial update — omit fields you do not want to change. At least one field is required.
+        Send null to clear photo, description or category; title, price, discount_percentage
+        and quantity cannot be null.
       minProperties: 1
       properties:
         photo:

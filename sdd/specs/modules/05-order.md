@@ -104,11 +104,18 @@ Orders are not created via a direct POST /orders endpoint. They are created by t
 
 ## Cross-Module Notes
 
-**Product delete guard (BR-PROD-006).** `HasActiveOrders` in `internal/product/shared/repository.go`
-joins `order_items` (by `product_id`) with `orders` and looks for `pending`, `paid` or `shipped`
-orders. Until the `orders` and `order_items` tables exist it returns `false`, so product deletion
-works before this module. Once this module's migration runs, the guard applies with no code change.
+**Product delete guard (BR-PROD-006).** The delete usecase asks an `OrderChecker` whether the product
+is in orders with `domain.ActiveOrderStatuses` (`pending`, `paid`, `shipped`).
+`shared.OrderRepository.HasOrdersWithStatus` (`internal/product/shared/orders.go`) joins `order_items`
+(by `product_id`) with `orders` and filters `orders.status = ANY($2)`. Until this module exists,
+`setup.go` injects the `shared.NoOrders` stub, which always answers `false`.
+When this module's migration lands, swap `productshared.NoOrders{}` for
+`productshared.NewOrderRepository(conn)` in `setup.go` and delete `NoOrders`.
 Keep the table and column names above (`order_items.product_id`, `order_items.order_id`, `orders.status`).
+
+**Open question — delete is check-then-act.** The usecase checks for active orders and then deletes,
+in two statements. Once checkout can create orders concurrently, run both inside one transaction
+(the product repository already accepts a `*sql.Tx` through `DBTX`) and lock the product row.
 
 **Open question — deleting products with past orders.** `order_items.product_id` references
 `products(id)` with the default `NO ACTION`, so a hard delete of a product that appears in a

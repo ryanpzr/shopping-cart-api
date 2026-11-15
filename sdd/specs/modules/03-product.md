@@ -33,7 +33,7 @@ CREATE TABLE products (
     title                VARCHAR(255)  NOT NULL,
     description          TEXT,
     price                NUMERIC(10,2) NOT NULL CHECK (price > 0),
-    discount_percentage  INTEGER       NOT NULL DEFAULT 0 CHECK (discount_percentage >= 0 AND discount_percentage <= 80),
+    discount_percentage  INTEGER       NOT NULL DEFAULT 0 CHECK (discount_percentage >= 0 AND discount_percentage <= 100),
     quantity             INTEGER       NOT NULL DEFAULT 0 CHECK (quantity >= 0),
     status               VARCHAR(10)   NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
     category             VARCHAR(100),
@@ -50,7 +50,7 @@ CREATE INDEX idx_products_category  ON products(category);
 
 | Rule | Value | Reason |
 |---|---|---|
-| `discount_percentage` | 0–80 | The marketplace keeps a minimum margin |
+| `discount_percentage` | 0–80 | The marketplace keeps a minimum margin. Enforced by the domain; the schema only keeps the structural `0–100` check, so changing the cap needs no migration |
 | `price` | > 0 and <= 1,000,000 | Guards against input errors and abuse |
 | `quantity` | >= 0 | 0 means sold out: checkout can bring stock to 0 and sellers can set it; buying is blocked by the cart stock check (`ErrConflict`) |
 
@@ -118,7 +118,8 @@ without a migration.
 
 - [x] Migration SQL — `db/migrations/002_create_products.sql` (`products` table + indexes)
 - [x] `internal/product/domain/product.go` — full entity, `FinalPrice()`; field rules in `domain/rules.go`
-- [x] `internal/product/shared/repository.go` — `FindAll` (with filters), `FindByID`, `Create`, `Update`, `UpdateStatus`, `Delete`, `HasActiveOrders`; takes `context.Context` and a `DBTX` (`*sql.DB` or `*sql.Tx`)
+- [x] `internal/product/shared/repository.go` — `FindAll` (with filters, including `Status`), `FindByID`, `Create`, `Update` (whole entity), `UpdateStatus`, `Delete`; takes `context.Context` and a `DBTX` (`*sql.DB` or `*sql.Tx`); returns `domain.ErrProductNotFound` or wrapped errors, never `apperrors`
+- [x] `internal/product/shared/orders.go` — `OrderRepository.HasOrdersWithStatus`, and the `NoOrders` stub wired in `setup.go` until module 05
 - [x] `internal/product/features/list_products/` — handler, usecase, ports, dtos, tests
 - [x] `internal/product/features/get_product/` — handler, usecase, ports, dtos, tests
 - [x] `internal/product/features/create_product/` — handler, usecase, ports, dtos, tests

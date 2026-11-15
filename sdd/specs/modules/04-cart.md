@@ -94,7 +94,12 @@ CREATE TABLE cart_items (
 - `product.seller_id` must ≠ `current_user_id` → `ErrForbidden` (403)
 - `product.quantity` >= requested quantity → `ErrConflict` (409) if insufficient
 - If `(cart_id, product_id)` row already exists: add to existing quantity, re-validate combined total against stock
-- `price_snapshot = product.price * (1 - product.discount_percentage / 100)` locked at this moment
+- `price_snapshot = product.price * (1 - product.discount_percentage / 100)` locked at this moment (use `domain.Product.FinalPrice()`)
+
+> **Open question — money type.** Product prices are `NUMERIC(10,2)` in the database and `float64` in Go,
+> rounded to cents by `FinalPrice()`. That is fine for a single price, but the cart sums snapshots and
+> quantities. Decide before implementing totals whether to keep `float64` with rounding at each step or move
+> money to integer cents (`int64`) or a decimal type.
 
 **BR-CART-003 — Remove item from cart**
 - `ErrNotFound` (404) if `itemId` does not belong to `current_user`'s active cart
