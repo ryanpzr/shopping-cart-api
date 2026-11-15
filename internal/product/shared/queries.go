@@ -37,11 +37,21 @@ const (
 
 	queryDelete = `DELETE FROM products WHERE id = $1`
 
+	// The order tables arrive with module 05. PostgreSQL resolves table names
+	// when it parses a query, so their existence is checked in a separate query.
+	queryOrderTablesExist = `
+		SELECT to_regclass('public.orders') IS NOT NULL
+		   AND to_regclass('public.order_items') IS NOT NULL
+	`
+
+	// Active orders (BR-PROD-006): pending, paid or shipped.
 	queryHasActiveOrders = `
 		SELECT EXISTS (
-			SELECT 1 FROM orders
-			WHERE product_id = $1
-			  AND status IN ('pending', 'paid', 'shipped')
+			SELECT 1
+			FROM order_items oi
+			JOIN orders o ON o.id = oi.order_id
+			WHERE oi.product_id = $1
+			  AND o.status IN ('pending', 'paid', 'shipped')
 		)
 	`
 )

@@ -183,7 +183,18 @@ func (r *repository) Delete(ctx context.Context, id int) error {
 	return requireAffected(result, "delete")
 }
 
+// HasActiveOrders reports whether the product is in a pending, paid or shipped
+// order. Before the order tables exist (module 05) no order can reference the
+// product, so it returns false instead of failing.
 func (r *repository) HasActiveOrders(ctx context.Context, productID int) (bool, error) {
+	var tablesExist bool
+	if err := r.db.QueryRowContext(ctx, queryOrderTablesExist).Scan(&tablesExist); err != nil {
+		return false, internal("check order tables", err)
+	}
+	if !tablesExist {
+		return false, nil
+	}
+
 	var exists bool
 	if err := r.db.QueryRowContext(ctx, queryHasActiveOrders, productID).Scan(&exists); err != nil {
 		return false, internal("has active orders", err)
