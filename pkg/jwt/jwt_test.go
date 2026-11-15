@@ -3,6 +3,9 @@ package jwtutil_test
 import (
 	"os"
 	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,4 +42,35 @@ func TestParse_WrongSecret(t *testing.T) {
 	os.Setenv("JWT_SECRET", "secret-b")
 	_, err = jwtutil.Parse(token)
 	assert.Error(t, err)
+}
+
+func TestGenerate_MissingSecret(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
+
+	token, err := jwtutil.Generate(1, "admin", "admin@example.com")
+	assert.Error(t, err)
+	assert.Empty(t, token)
+}
+
+func TestParse_MissingSecret_RejectsTokenSignedWithEmptyKey(t *testing.T) {
+	// A token signed with an empty HMAC key must never be accepted.
+	forged := jwt.NewWithClaims(jwt.SigningMethodHS256, jwtutil.Claims{
+		RegisteredClaims: jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour))},
+		UserID:           1,
+		Role:             "admin",
+	})
+	signed, err := forged.SignedString([]byte(""))
+	require.NoError(t, err)
+
+	t.Setenv("JWT_SECRET", "")
+	_, err = jwtutil.Parse(signed)
+	assert.Error(t, err)
+}
+
+func TestValidateSecret(t *testing.T) {
+	t.Setenv("JWT_SECRET", "")
+	assert.ErrorIs(t, jwtutil.ValidateSecret(), jwtutil.ErrMissingSecret)
+
+	t.Setenv("JWT_SECRET", "test-secret")
+	assert.NoError(t, jwtutil.ValidateSecret())
 }

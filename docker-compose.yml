@@ -25,6 +25,7 @@ services:
       DB_PASSWORD: 12345
       DB_NAME: shopping_cart
       DB_SSLMODE: disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - copy .env.example to .env and set it}
     ports:
       - '8080:8080'
     depends_on:
