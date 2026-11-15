@@ -19,9 +19,9 @@ type ProductHandlers struct {
 	Delete deleteproduct.Handler
 }
 
-// MapRouters registra rotas de produto.
-// public  → sem autenticação (GET list e GET by id)
-// protected → requer middleware.Auth() aplicado externamente
+// MapRouters registers the product routes.
+// public: no authentication (list and get by id).
+// protected: the caller must apply middleware.Auth().
 func MapRouters(public, protected *gin.RouterGroup, h ProductHandlers) {
 	public.GET("", h.List.List)
 	public.GET("/:id", h.Get.Get)

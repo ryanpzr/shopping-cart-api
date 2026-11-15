@@ -1,13 +1,23 @@
 package shared
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
+
+// DBTX is satisfied by both *sql.DB and *sql.Tx, so the repository can run
+// inside a transaction owned by the caller (e.g. checkout, outbox events).
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
 
 type ProductFilters struct {
 	Category *string
@@ -16,8 +26,8 @@ type ProductFilters struct {
 	Search   *string
 }
 
-// ProductUpdate contém apenas campos opcionais (pointer) usados em partial update.
-// Campos nil são ignorados pelo COALESCE no SQL — o valor existente é mantido.
+// ProductUpdate holds the optional fields of a partial update.
+// Nil fields keep their current value.
 type ProductUpdate struct {
 	Photo              *string
 	Title              *string
@@ -29,173 +39,165 @@ type ProductUpdate struct {
 }
 
 type Repository interface {
-	FindAll(filters ProductFilters, limit, offset int) ([]domain.Product, int, error)
-	FindById(id int) (*domain.Product, error)
-	Create(p domain.Product) (domain.Product, error)
-	Update(id int, u ProductUpdate) (domain.Product, error)
-	UpdateStatus(id int, status string) error
-	Delete(id int) error
-	HasActiveOrders(productID int) (bool, error)
+	FindAll(ctx context.Context, filters ProductFilters, limit, offset int) ([]domain.Product, int, error)
+	FindByID(ctx context.Context, id int) (*domain.Product, error)
+	Create(ctx context.Context, p domain.Product) (domain.Product, error)
+	Update(ctx context.Context, id int, u ProductUpdate) (domain.Product, error)
+	UpdateStatus(ctx context.Context, id int, status string) error
+	Delete(ctx context.Context, id int) error
+	HasActiveOrders(ctx context.Context, productID int) (bool, error)
 }
 
 type repository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewRepository(db *sql.DB) Repository {
+func NewRepository(db DBTX) Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) FindAll(filters ProductFilters, limit, offset int) ([]domain.Product, int, error) {
-	var conditions []string
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanProduct(s scanner) (domain.Product, error) {
+	var p domain.Product
+	err := s.Scan(
+		&p.ID, &p.SellerID, &p.Photo, &p.Title, &p.Description,
+		&p.Price, &p.DiscountPercentage, &p.Quantity,
+		&p.Status, &p.Category, &p.CreatedAt, &p.UpdatedAt,
+	)
+	return p, err
+}
+
+func internal(op string, err error) error {
+	return apperrors.NewInternalServer(fmt.Sprintf("product repository: %s: %v", op, err))
+}
+
+func (r *repository) FindAll(ctx context.Context, filters ProductFilters, limit, offset int) ([]domain.Product, int, error) {
+	conditions := []string{"status = 'active'"}
 	var args []any
-	argIdx := 1
 
-	conditions = append(conditions, "status = 'active'")
-
+	addCondition := func(format string, value any) {
+		args = append(args, value)
+		conditions = append(conditions, fmt.Sprintf(format, len(args)))
+	}
 	if filters.Category != nil {
-		conditions = append(conditions, fmt.Sprintf("category = $%d", argIdx))
-		args = append(args, *filters.Category)
-		argIdx++
+		addCondition("category = $%d", *filters.Category)
 	}
 	if filters.MinPrice != nil {
-		conditions = append(conditions, fmt.Sprintf("price >= $%d", argIdx))
-		args = append(args, *filters.MinPrice)
-		argIdx++
+		addCondition("price >= $%d", *filters.MinPrice)
 	}
 	if filters.MaxPrice != nil {
-		conditions = append(conditions, fmt.Sprintf("price <= $%d", argIdx))
-		args = append(args, *filters.MaxPrice)
-		argIdx++
+		addCondition("price <= $%d", *filters.MaxPrice)
 	}
 	if filters.Search != nil {
-		conditions = append(conditions, fmt.Sprintf("LOWER(title) LIKE $%d", argIdx))
-		args = append(args, "%"+strings.ToLower(*filters.Search)+"%")
-		argIdx++
+		addCondition("LOWER(title) LIKE $%d", "%"+strings.ToLower(*filters.Search)+"%")
 	}
 
 	where := "WHERE " + strings.Join(conditions, " AND ")
 
-	// Count total
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM products %s", where)
 	var total int
-	if err := r.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
-		return nil, 0, apperrors.NewInternalServer(err.Error())
+	countQuery := "SELECT COUNT(*) FROM products " + where
+	if err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, internal("count", err)
 	}
 
-	// Fetch page
-	listArgs := append(args, limit, offset)
 	listQuery := fmt.Sprintf(`
-		SELECT id, seller_id, photo, title, description, price, discount_percentage,
-		       quantity, status, category, created_at, updated_at
+		SELECT %s
 		FROM products %s
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $%d OFFSET $%d
-	`, where, argIdx, argIdx+1)
+	`, productColumns, where, len(args)+1, len(args)+2)
 
-	rows, err := r.db.Query(listQuery, listArgs...)
+	rows, err := r.db.QueryContext(ctx, listQuery, append(args, limit, offset)...)
 	if err != nil {
-		return nil, 0, apperrors.NewInternalServer(err.Error())
+		return nil, 0, internal("list", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var products []domain.Product
+	products := make([]domain.Product, 0, limit)
 	for rows.Next() {
-		var p domain.Product
-		if err := rows.Scan(
-			&p.ID, &p.SellerID, &p.Photo, &p.Title, &p.Description,
-			&p.Price, &p.DiscountPercentage, &p.Quantity,
-			&p.Status, &p.Category, &p.CreatedAt, &p.UpdatedAt,
-		); err != nil {
-			return nil, 0, apperrors.NewInternalServer(err.Error())
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, 0, internal("scan", err)
 		}
 		products = append(products, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, internal("iterate", err)
 	}
 
 	return products, total, nil
 }
 
-func (r *repository) FindById(id int) (*domain.Product, error) {
-	var p domain.Product
-	err := r.db.QueryRow(queryFindById, id).Scan(
-		&p.ID, &p.SellerID, &p.Photo, &p.Title, &p.Description,
-		&p.Price, &p.DiscountPercentage, &p.Quantity,
-		&p.Status, &p.Category, &p.CreatedAt, &p.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
+func (r *repository) FindByID(ctx context.Context, id int) (*domain.Product, error) {
+	p, err := scanProduct(r.db.QueryRowContext(ctx, queryFindByID, id))
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apperrors.NewNotFound("product not found")
 	}
 	if err != nil {
-		return nil, apperrors.NewInternalServer(err.Error())
+		return nil, internal("find by id", err)
 	}
 	return &p, nil
 }
 
-func (r *repository) Create(p domain.Product) (domain.Product, error) {
-	err := r.db.QueryRow(
-		queryCreate,
+func (r *repository) Create(ctx context.Context, p domain.Product) (domain.Product, error) {
+	created, err := scanProduct(r.db.QueryRowContext(ctx, queryCreate,
 		p.SellerID, p.Photo, p.Title, p.Description,
 		p.Price, p.DiscountPercentage, p.Quantity, p.Status, p.Category,
-	).Scan(
-		&p.ID, &p.SellerID, &p.Photo, &p.Title, &p.Description,
-		&p.Price, &p.DiscountPercentage, &p.Quantity,
-		&p.Status, &p.Category, &p.CreatedAt, &p.UpdatedAt,
-	)
+	))
 	if err != nil {
-		return domain.Product{}, apperrors.NewInternalServer(err.Error())
+		return domain.Product{}, internal("create", err)
 	}
-	return p, nil
+	return created, nil
 }
 
-func (r *repository) Update(id int, u ProductUpdate) (domain.Product, error) {
-	var p domain.Product
-	err := r.db.QueryRow(
-		queryUpdate,
+func (r *repository) Update(ctx context.Context, id int, u ProductUpdate) (domain.Product, error) {
+	updated, err := scanProduct(r.db.QueryRowContext(ctx, queryUpdate,
 		u.Photo, u.Title, u.Description, u.Price,
 		u.DiscountPercentage, u.Quantity, u.Category, id,
-	).Scan(
-		&p.ID, &p.SellerID, &p.Photo, &p.Title, &p.Description,
-		&p.Price, &p.DiscountPercentage, &p.Quantity,
-		&p.Status, &p.Category, &p.CreatedAt, &p.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
+	))
+	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Product{}, apperrors.NewNotFound("product not found")
 	}
 	if err != nil {
-		return domain.Product{}, apperrors.NewInternalServer(err.Error())
+		return domain.Product{}, internal("update", err)
 	}
-	return p, nil
+	return updated, nil
 }
 
-func (r *repository) UpdateStatus(id int, status string) error {
-	result, err := r.db.Exec(queryUpdateStatus, status, id)
+func (r *repository) UpdateStatus(ctx context.Context, id int, status string) error {
+	result, err := r.db.ExecContext(ctx, queryUpdateStatus, status, id)
 	if err != nil {
-		return apperrors.NewInternalServer(err.Error())
+		return internal("update status", err)
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperrors.NewNotFound("product not found")
-	}
-	return nil
+	return requireAffected(result, "update status")
 }
 
-func (r *repository) Delete(id int) error {
-	result, err := r.db.Exec(queryDelete, id)
+func (r *repository) Delete(ctx context.Context, id int) error {
+	result, err := r.db.ExecContext(ctx, queryDelete, id)
 	if err != nil {
-		return apperrors.NewInternalServer(err.Error())
+		return internal("delete", err)
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return apperrors.NewNotFound("product not found")
-	}
-	return nil
+	return requireAffected(result, "delete")
 }
 
-func (r *repository) HasActiveOrders(productID int) (bool, error) {
+func (r *repository) HasActiveOrders(ctx context.Context, productID int) (bool, error) {
 	var exists bool
-	err := r.db.QueryRow(queryHasActiveOrders, productID).Scan(&exists)
-	if err != nil {
-		return false, apperrors.NewInternalServer(err.Error())
+	if err := r.db.QueryRowContext(ctx, queryHasActiveOrders, productID).Scan(&exists); err != nil {
+		return false, internal("has active orders", err)
 	}
 	return exists, nil
+}
+
+func requireAffected(result sql.Result, op string) error {
+	n, err := result.RowsAffected()
+	if err != nil {
+		return internal(op, err)
+	}
+	if n == 0 {
+		return apperrors.NewNotFound("product not found")
+	}
+	return nil
 }

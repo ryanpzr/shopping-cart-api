@@ -1,10 +1,10 @@
 package togglestatus
 
-import "github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+import (
+	"context"
 
-const (
-	inactive = "inactive"
-	active   = "active"
+	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
+	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
 
 type usecase struct {
@@ -15,22 +15,21 @@ func NewUsecase(repo Repository) Usecase {
 	return &usecase{repo: repo}
 }
 
-func (u *usecase) Toggle(productID, userID int) (ToggleResponse, error) {
-	p, err := u.repo.FindById(productID)
+func (u *usecase) Toggle(ctx context.Context, productID, userID int) (ToggleResponse, error) {
+	p, err := u.repo.FindByID(ctx, productID)
 	if err != nil {
 		return ToggleResponse{}, err
 	}
-
 	if p.SellerID != userID {
 		return ToggleResponse{}, apperrors.NewForbidden("you are not the owner of this product")
 	}
 
-	newStatus := inactive
-	if p.Status == inactive {
-		newStatus = active
+	newStatus := domain.StatusInactive
+	if !p.IsActive() {
+		newStatus = domain.StatusActive
 	}
 
-	if err := u.repo.UpdateStatus(productID, newStatus); err != nil {
+	if err := u.repo.UpdateStatus(ctx, productID, newStatus); err != nil {
 		return ToggleResponse{}, err
 	}
 

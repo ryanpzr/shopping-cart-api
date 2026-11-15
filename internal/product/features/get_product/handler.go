@@ -22,12 +22,12 @@ func NewHandler(uc Usecase) Handler {
 
 func (h *handler) Get(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id < 1 {
 		apperrors.HandleError(c, apperrors.NewBadRequest("invalid product id"))
 		return
 	}
 
-	resp, err := h.usecase.Get(id)
+	resp, err := h.usecase.Get(c.Request.Context(), id)
 	if err != nil {
 		apperrors.HandleError(c, err)
 		return

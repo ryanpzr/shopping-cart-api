@@ -1,9 +1,13 @@
 package listproducts
 
-import "github.com/ryanpzr/shopping-cart-api/internal/product/shared"
+import (
+	"context"
+
+	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
+)
 
 type Usecase interface {
-	List(req ListRequest) (ListResponse, error)
+	List(ctx context.Context, req ListRequest) (ListResponse, error)
 }
 
 type Repository = shared.Repository

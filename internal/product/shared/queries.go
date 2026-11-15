@@ -1,9 +1,11 @@
 package shared
 
+const productColumns = `id, seller_id, photo, title, description, price, discount_percentage,
+       quantity, status, category, created_at, updated_at`
+
 const (
-	queryFindById = `
-		SELECT id, seller_id, photo, title, description, price, discount_percentage,
-		       quantity, status, category, created_at, updated_at
+	queryFindByID = `
+		SELECT ` + productColumns + `
 		FROM products
 		WHERE id = $1
 	`
@@ -11,10 +13,9 @@ const (
 	queryCreate = `
 		INSERT INTO products (seller_id, photo, title, description, price, discount_percentage, quantity, status, category)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		RETURNING id, seller_id, photo, title, description, price, discount_percentage,
-		          quantity, status, category, created_at, updated_at
-	`
+		RETURNING ` + productColumns
 
+	// Partial update: NULL parameters keep the current value.
 	queryUpdate = `
 		UPDATE products
 		SET photo               = COALESCE($1, photo),
@@ -26,9 +27,7 @@ const (
 		    category            = COALESCE($7, category),
 		    updated_at          = NOW()
 		WHERE id = $8
-		RETURNING id, seller_id, photo, title, description, price, discount_percentage,
-		          quantity, status, category, created_at, updated_at
-	`
+		RETURNING ` + productColumns
 
 	queryUpdateStatus = `
 		UPDATE products
@@ -36,15 +35,10 @@ const (
 		WHERE id = $2
 	`
 
-	queryDelete = `
-		DELETE FROM products WHERE id = $1
-	`
+	queryDelete = `DELETE FROM products WHERE id = $1`
 
-	// TODO(module-05): Esta query depende da tabela 'orders' criada em sdd/specs/modules/05-order.md.
-	// Ao rodar DELETE antes de implementar o módulo 05, esta query retornará erro de relação inexistente.
-	// Implementar o módulo 05 resolverá isso automaticamente.
 	queryHasActiveOrders = `
-		SELECT EXISTS(
+		SELECT EXISTS (
 			SELECT 1 FROM orders
 			WHERE product_id = $1
 			  AND status IN ('pending', 'paid', 'shipped')

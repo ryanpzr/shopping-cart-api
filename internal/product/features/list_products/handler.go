@@ -26,7 +26,7 @@ func (h *handler) List(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.usecase.List(req)
+	resp, err := h.usecase.List(c.Request.Context(), req)
 	if err != nil {
 		apperrors.HandleError(c, err)
 		return

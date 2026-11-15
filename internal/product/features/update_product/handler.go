@@ -22,7 +22,7 @@ func NewHandler(uc Usecase) Handler {
 
 func (h *handler) Update(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id < 1 {
 		apperrors.HandleError(c, apperrors.NewBadRequest("invalid product id"))
 		return
 	}
@@ -33,27 +33,7 @@ func (h *handler) Update(c *gin.Context) {
 		return
 	}
 
-	if req.Price != nil && *req.Price <= 0 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("price must be greater than 0"))
-		return
-	}
-	if req.Price != nil && *req.Price > 1_000_000 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("price must not exceed 1,000,000"))
-		return
-	}
-	if req.DiscountPercentage != nil && (*req.DiscountPercentage < 0 || *req.DiscountPercentage > 80) {
-		apperrors.HandleError(c, apperrors.NewBadRequest("discount_percentage must be between 0 and 80"))
-		return
-	}
-	if req.Quantity != nil && *req.Quantity < 1 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("quantity must be at least 1"))
-		return
-	}
-
-	userID, _ := c.Get("user_id")
-	userIDInt, _ := userID.(int)
-
-	resp, err := h.usecase.Update(id, userIDInt, req)
+	resp, err := h.usecase.Update(c.Request.Context(), id, c.GetInt("user_id"), req)
 	if err != nil {
 		apperrors.HandleError(c, err)
 		return

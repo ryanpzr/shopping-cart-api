@@ -26,31 +26,9 @@ func (h *handler) Create(c *gin.Context) {
 		return
 	}
 
-	if req.Title == "" {
-		apperrors.HandleError(c, apperrors.NewBadRequest("title is required"))
-		return
-	}
-	if req.Price <= 0 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("price must be greater than 0"))
-		return
-	}
-	if req.Quantity < 1 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("quantity must be at least 1"))
-		return
-	}
-	if req.Price > 1_000_000 {
-		apperrors.HandleError(c, apperrors.NewBadRequest("price must not exceed 1,000,000"))
-		return
-	}
-	if req.DiscountPercentage != nil && (*req.DiscountPercentage < 0 || *req.DiscountPercentage > 80) {
-		apperrors.HandleError(c, apperrors.NewBadRequest("discount_percentage must be between 0 and 80"))
-		return
-	}
+	sellerID := c.GetInt("user_id")
 
-	sellerID, _ := c.Get("user_id")
-	sellerIDInt, _ := sellerID.(int)
-
-	resp, err := h.usecase.Create(sellerIDInt, req)
+	resp, err := h.usecase.Create(c.Request.Context(), sellerID, req)
 	if err != nil {
 		apperrors.HandleError(c, err)
 		return

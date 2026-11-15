@@ -28,22 +28,22 @@ func RegisterRoutes(
 	hdManage adminmanageuser.Handler,
 	hdActivity adminactivitylog.Handler,
 ) {
-	// Public — auth
+	// Public: auth
 	authGroup := api.Group("/auth")
 	auth.MapRouters(authGroup, hdRegister, hdLogin)
 
-	// Products — GET público, demais rotas protegidas
+	// Products: GET routes are public, the rest require auth
 	productPublic := api.Group("/products")
 	productProtected := api.Group("/products")
 	productProtected.Use(middleware.Auth())
 	product.MapRouters(productPublic, productProtected, hdProducts)
 
-	// Protected — qualquer role autenticada
+	// Protected: any authenticated role
 	protected := api.Group("")
 	protected.Use(middleware.Auth())
 	user.MapClientRoutes(protected.Group("/users"), hdGetMe, hdUpdateMe)
 
-	// Admin-only
+	// Admin only
 	adminProtected := api.Group("")
 	adminProtected.Use(middleware.Auth(), middleware.RequireRole("admin"))
 	user.MapAdminRoutes(adminProtected.Group("/admin/users"), hdAdminList, hdAdminGet, hdManage, hdActivity)

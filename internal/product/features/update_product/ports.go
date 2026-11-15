@@ -1,9 +1,13 @@
 package updateproduct
 
-import "github.com/ryanpzr/shopping-cart-api/internal/product/shared"
+import (
+	"context"
+
+	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
+)
 
 type Usecase interface {
-	Update(productID, userID int, req UpdateRequest) (ProductResponse, error)
+	Update(ctx context.Context, productID, userID int, req UpdateRequest) (ProductResponse, error)
 }
 
 type Repository = shared.Repository

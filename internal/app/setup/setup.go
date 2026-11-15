@@ -53,7 +53,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 	hdAdminList := adminlistusers.NewHandler(adminlistusers.NewUsecase(rpUser))
 	hdAdminGet := admingetuser.NewHandler(admingetuser.NewUsecase(rpUser))
 	hdManage := adminmanageuser.NewHandler(adminmanageuser.NewUsecase(rpUser))
-	hdActivity := adminactivitylog.NewHandler(adminactivitylog.NewUsecase()) // stub: módulo 06
+	hdActivity := adminactivitylog.NewHandler(adminactivitylog.NewUsecase()) // stub until module 06
 
 	route.RegisterRoutes(
 		api,

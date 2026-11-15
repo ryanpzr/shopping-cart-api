@@ -1,6 +1,12 @@
 package deleteproduct
 
-import "github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+import (
+	"context"
+
+	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+)
+
+const roleAdmin = "admin"
 
 type usecase struct {
 	repo Repository
@@ -10,20 +16,18 @@ func NewUsecase(repo Repository) Usecase {
 	return &usecase{repo: repo}
 }
 
-func (u *usecase) Delete(productID, userID int, role string) error {
-	p, err := u.repo.FindById(productID)
+func (u *usecase) Delete(ctx context.Context, productID, userID int, role string) error {
+	p, err := u.repo.FindByID(ctx, productID)
 	if err != nil {
 		return err
 	}
 
-	// Verificar permissão: admin pode deletar qualquer produto; client só o próprio
-	if role != "admin" && p.SellerID != userID {
+	// Admins can delete any product; clients only their own (BR-PROD-006).
+	if role != roleAdmin && p.SellerID != userID {
 		return apperrors.NewForbidden("you are not the owner of this product")
 	}
 
-	// TODO(module-05): HasActiveOrders depende da tabela 'orders' criada em sdd/specs/modules/05-order.md.
-	// Quando o módulo 05 for implementado, esta verificação passará a funcionar em runtime.
-	hasOrders, err := u.repo.HasActiveOrders(productID)
+	hasOrders, err := u.repo.HasActiveOrders(ctx, productID)
 	if err != nil {
 		return err
 	}
@@ -31,12 +35,11 @@ func (u *usecase) Delete(productID, userID int, role string) error {
 		return apperrors.NewConflict("product has active orders and cannot be deleted")
 	}
 
-	if err := u.repo.Delete(productID); err != nil {
+	if err := u.repo.Delete(ctx, productID); err != nil {
 		return err
 	}
 
-	// TODO(module-06): Emitir evento 'product_deleted' no activity log.
-	// Ver: sdd/specs/modules/06-activity-log.md
+	// TODO(module-06): emit `product_deleted` through the outbox, in the same transaction.
 
 	return nil
 }

@@ -22,18 +22,13 @@ func NewHandler(uc Usecase) Handler {
 
 func (h *handler) Delete(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id < 1 {
 		apperrors.HandleError(c, apperrors.NewBadRequest("invalid product id"))
 		return
 	}
 
-	userID, _ := c.Get("user_id")
-	userIDInt, _ := userID.(int)
-
-	role, _ := c.Get("role")
-	roleStr, _ := role.(string)
-
-	if err := h.usecase.Delete(id, userIDInt, roleStr); err != nil {
+	err = h.usecase.Delete(c.Request.Context(), id, c.GetInt("user_id"), c.GetString("role"))
+	if err != nil {
 		apperrors.HandleError(c, err)
 		return
 	}
