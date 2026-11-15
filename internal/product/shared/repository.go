@@ -92,7 +92,7 @@ func (r *repository) FindAll(ctx context.Context, filters ProductFilters, limit,
 		addCondition("price <= $%d", *filters.MaxPrice)
 	}
 	if filters.Search != nil {
-		addCondition("LOWER(title) LIKE $%d", "%"+strings.ToLower(*filters.Search)+"%")
+		addCondition(`title ILIKE $%d ESCAPE '\'`, "%"+escapeLike(*filters.Search)+"%")
 	}
 
 	where := "WHERE " + strings.Join(conditions, " AND ")
@@ -200,6 +200,14 @@ func (r *repository) HasActiveOrders(ctx context.Context, productID int) (bool, 
 		return false, internal("has active orders", err)
 	}
 	return exists, nil
+}
+
+// escapeLike makes LIKE wildcards in user input match literally, so a search
+// for "50%" does not match every title containing "50".
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func escapeLike(s string) string {
+	return likeEscaper.Replace(s)
 }
 
 func requireAffected(result sql.Result, op string) error {
