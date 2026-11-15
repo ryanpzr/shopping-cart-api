@@ -15,16 +15,17 @@ const (
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING ` + productColumns
 
-	// Partial update: NULL parameters keep the current value.
+	// Writes every editable column. seller_id never changes and status has its
+	// own operation (queryUpdateStatus).
 	queryUpdate = `
 		UPDATE products
-		SET photo               = COALESCE($1, photo),
-		    title               = COALESCE($2, title),
-		    description         = COALESCE($3, description),
-		    price               = COALESCE($4, price),
-		    discount_percentage = COALESCE($5, discount_percentage),
-		    quantity            = COALESCE($6, quantity),
-		    category            = COALESCE($7, category),
+		SET photo               = $1,
+		    title               = $2,
+		    description         = $3,
+		    price               = $4,
+		    discount_percentage = $5,
+		    quantity            = $6,
+		    category            = $7,
 		    updated_at          = NOW()
 		WHERE id = $8
 		RETURNING ` + productColumns
@@ -37,21 +38,13 @@ const (
 
 	queryDelete = `DELETE FROM products WHERE id = $1`
 
-	// The order tables arrive with module 05. PostgreSQL resolves table names
-	// when it parses a query, so their existence is checked in a separate query.
-	queryOrderTablesExist = `
-		SELECT to_regclass('public.orders') IS NOT NULL
-		   AND to_regclass('public.order_items') IS NOT NULL
-	`
-
-	// Active orders (BR-PROD-006): pending, paid or shipped.
-	queryHasActiveOrders = `
+	queryHasOrdersWithStatus = `
 		SELECT EXISTS (
 			SELECT 1
 			FROM order_items oi
 			JOIN orders o ON o.id = oi.order_id
 			WHERE oi.product_id = $1
-			  AND o.status IN ('pending', 'paid', 'shipped')
+			  AND o.status = ANY($2)
 		)
 	`
 )

@@ -2,7 +2,9 @@ package getproduct
 
 import (
 	"context"
+	"errors"
 
+	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
 
@@ -17,7 +19,7 @@ func NewUsecase(repo Repository) Usecase {
 func (u *usecase) Get(ctx context.Context, id int) (ProductResponse, error) {
 	p, err := u.repo.FindByID(ctx, id)
 	if err != nil {
-		return ProductResponse{}, err
+		return ProductResponse{}, toAppError(err)
 	}
 
 	// Inactive products are hidden from the public catalog (BR-PROD-002).
@@ -26,4 +28,11 @@ func (u *usecase) Get(ctx context.Context, id int) (ProductResponse, error) {
 	}
 
 	return toResponse(*p), nil
+}
+
+func toAppError(err error) error {
+	if errors.Is(err, domain.ErrProductNotFound) {
+		return apperrors.NewNotFound("product not found")
+	}
+	return apperrors.NewInternalServer(err.Error())
 }

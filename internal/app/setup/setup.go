@@ -42,7 +42,8 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
 		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
-		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct)),
+		// Orders arrive in Phase 3: swap NoOrders for productshared.NewOrderRepository(conn) then.
+		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, productshared.NoOrders{})),
 	}
 
 	// User features — client

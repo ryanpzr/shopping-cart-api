@@ -46,7 +46,7 @@ func TestGet_InactiveProductIsNotFound(t *testing.T) {
 
 func TestGet_NotFound(t *testing.T) {
 	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(nil, apperrors.NewNotFound("product not found"))
+	repo.On("FindByID", mock.Anything, 3).Return(nil, domain.ErrProductNotFound)
 
 	_, err := getproduct.NewUsecase(repo).Get(context.Background(), 3)
 

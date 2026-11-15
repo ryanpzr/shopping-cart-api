@@ -2,9 +2,9 @@ package updateproduct
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
-	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
 
@@ -17,29 +17,29 @@ func NewUsecase(repo Repository) Usecase {
 }
 
 func (u *usecase) Update(ctx context.Context, productID, userID int, req UpdateRequest) (ProductResponse, error) {
-	if err := validate(req); err != nil {
-		return ProductResponse{}, err
+	if req.isEmpty() {
+		return ProductResponse{}, apperrors.NewBadRequest("at least one field must be provided")
 	}
 
 	existing, err := u.repo.FindByID(ctx, productID)
 	if err != nil {
-		return ProductResponse{}, err
+		return ProductResponse{}, toAppError(err)
 	}
 	if existing.SellerID != userID {
 		return ProductResponse{}, apperrors.NewForbidden("you are not the owner of this product")
 	}
 
-	updated, err := u.repo.Update(ctx, productID, shared.ProductUpdate{
-		Photo:              req.Photo,
-		Title:              req.Title,
-		Description:        req.Description,
-		Price:              req.Price,
-		DiscountPercentage: req.DiscountPercentage,
-		Quantity:           req.Quantity,
-		Category:           req.Category,
-	})
+	product, err := apply(*existing, req)
 	if err != nil {
 		return ProductResponse{}, err
+	}
+	if err := product.Validate(); err != nil {
+		return ProductResponse{}, toAppError(err)
+	}
+
+	updated, err := u.repo.Update(ctx, product)
+	if err != nil {
+		return ProductResponse{}, toAppError(err)
 	}
 
 	// TODO(module-06): emit `product_updated` through the outbox, in the same transaction.
@@ -47,29 +47,56 @@ func (u *usecase) Update(ctx context.Context, productID, userID int, req UpdateR
 	return toResponse(updated), nil
 }
 
-func validate(req UpdateRequest) error {
-	if req.isEmpty() {
-		return apperrors.NewBadRequest("at least one field must be provided")
+// apply returns p with the fields present in req. Nullable fields are cleared
+// by null; required fields reject it.
+func apply(p domain.Product, req UpdateRequest) (domain.Product, error) {
+	if req.Photo.Set {
+		p.Photo = req.Photo.Value
 	}
-	if req.Title != nil {
-		if err := domain.ValidateTitle(*req.Title); err != nil {
-			return err
+	if req.Description.Set {
+		p.Description = req.Description.Value
+	}
+	if req.Category.Set {
+		p.Category = req.Category.Value
+	}
+	if req.Title.Set {
+		if req.Title.Value == nil {
+			return p, notNull("title")
 		}
+		p.Title = *req.Title.Value
 	}
-	if req.Price != nil {
-		if err := domain.ValidatePrice(*req.Price); err != nil {
-			return err
+	if req.Price.Set {
+		if req.Price.Value == nil {
+			return p, notNull("price")
 		}
+		p.Price = *req.Price.Value
 	}
-	if req.DiscountPercentage != nil {
-		if err := domain.ValidateDiscount(*req.DiscountPercentage); err != nil {
-			return err
+	if req.DiscountPercentage.Set {
+		if req.DiscountPercentage.Value == nil {
+			return p, notNull("discount_percentage")
 		}
+		p.DiscountPercentage = *req.DiscountPercentage.Value
 	}
-	if req.Quantity != nil {
-		if err := domain.ValidateQuantity(*req.Quantity); err != nil {
-			return err
+	if req.Quantity.Set {
+		if req.Quantity.Value == nil {
+			return p, notNull("quantity")
 		}
+		p.Quantity = *req.Quantity.Value
 	}
-	return domain.ValidateCategory(req.Category)
+	return p, nil
+}
+
+func notNull(field string) error {
+	return apperrors.NewBadRequest(field + " cannot be null")
+}
+
+func toAppError(err error) error {
+	var invalid *domain.ValidationError
+	if errors.As(err, &invalid) {
+		return apperrors.NewBadRequest(invalid.Message)
+	}
+	if errors.Is(err, domain.ErrProductNotFound) {
+		return apperrors.NewNotFound("product not found")
+	}
+	return apperrors.NewInternalServer(err.Error())
 }

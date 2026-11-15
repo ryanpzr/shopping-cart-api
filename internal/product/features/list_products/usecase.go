@@ -29,14 +29,17 @@ func (u *usecase) List(ctx context.Context, req ListRequest) (ListResponse, erro
 
 	limit, offset := paginate(req.Limit, req.Offset)
 
+	// The public catalog only shows active products (BR-PROD-001).
+	active := domain.StatusActive
 	products, total, err := u.repo.FindAll(ctx, shared.ProductFilters{
+		Status:   &active,
 		Category: nonBlank(req.Category),
 		MinPrice: req.MinPrice,
 		MaxPrice: req.MaxPrice,
 		Search:   nonBlank(req.Search),
 	}, limit, offset)
 	if err != nil {
-		return ListResponse{}, err
+		return ListResponse{}, apperrors.NewInternalServer(err.Error())
 	}
 
 	data := make([]ProductResponse, 0, len(products))
@@ -60,7 +63,10 @@ func validate(req ListRequest) error {
 	if req.MinPrice != nil && req.MaxPrice != nil && *req.MinPrice > *req.MaxPrice {
 		return apperrors.NewBadRequest("min_price must not be greater than max_price")
 	}
-	return domain.ValidateCategory(nonBlank(req.Category))
+	if err := domain.ValidateCategory(nonBlank(req.Category)); err != nil {
+		return apperrors.NewBadRequest(err.Error())
+	}
+	return nil
 }
 
 // paginate applies the same rules as the admin user listing:

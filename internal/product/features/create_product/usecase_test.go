@@ -2,6 +2,7 @@ package createproduct_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -109,7 +110,7 @@ func TestCreate_ValidationErrors(t *testing.T) {
 func TestCreate_RepositoryError(t *testing.T) {
 	repo := new(mocks.Repository)
 	repo.On("Create", mock.Anything, mock.Anything).
-		Return(domain.Product{}, apperrors.NewInternalServer("db down"))
+		Return(domain.Product{}, errors.New("connection refused"))
 
 	_, err := createproduct.NewUsecase(repo).Create(context.Background(), 7, validRequest())
 

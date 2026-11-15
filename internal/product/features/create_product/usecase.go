@@ -2,6 +2,7 @@ package createproduct
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
@@ -16,8 +17,11 @@ func NewUsecase(repo Repository) Usecase {
 }
 
 func (u *usecase) Create(ctx context.Context, sellerID int, req CreateRequest) (ProductResponse, error) {
-	if err := validate(req); err != nil {
-		return ProductResponse{}, err
+	if req.Price == nil {
+		return ProductResponse{}, apperrors.NewBadRequest("price is required")
+	}
+	if req.Quantity == nil {
+		return ProductResponse{}, apperrors.NewBadRequest("quantity is required")
 	}
 
 	discount := 0
@@ -25,7 +29,7 @@ func (u *usecase) Create(ctx context.Context, sellerID int, req CreateRequest) (
 		discount = *req.DiscountPercentage
 	}
 
-	created, err := u.repo.Create(ctx, domain.Product{
+	product := domain.Product{
 		SellerID:           sellerID,
 		Photo:              req.Photo,
 		Title:              req.Title,
@@ -35,9 +39,14 @@ func (u *usecase) Create(ctx context.Context, sellerID int, req CreateRequest) (
 		Quantity:           *req.Quantity,
 		Status:             domain.StatusActive,
 		Category:           req.Category,
-	})
+	}
+	if err := product.Validate(); err != nil {
+		return ProductResponse{}, toAppError(err)
+	}
+
+	created, err := u.repo.Create(ctx, product)
 	if err != nil {
-		return ProductResponse{}, err
+		return ProductResponse{}, toAppError(err)
 	}
 
 	// TODO(module-06): emit `product_created` through the outbox, in the same transaction.
@@ -45,26 +54,10 @@ func (u *usecase) Create(ctx context.Context, sellerID int, req CreateRequest) (
 	return toResponse(created), nil
 }
 
-func validate(req CreateRequest) error {
-	if err := domain.ValidateTitle(req.Title); err != nil {
-		return err
+func toAppError(err error) error {
+	var invalid *domain.ValidationError
+	if errors.As(err, &invalid) {
+		return apperrors.NewBadRequest(invalid.Message)
 	}
-	if req.Price == nil {
-		return apperrors.NewBadRequest("price is required")
-	}
-	if err := domain.ValidatePrice(*req.Price); err != nil {
-		return err
-	}
-	if req.Quantity == nil {
-		return apperrors.NewBadRequest("quantity is required")
-	}
-	if err := domain.ValidateQuantity(*req.Quantity); err != nil {
-		return err
-	}
-	if req.DiscountPercentage != nil {
-		if err := domain.ValidateDiscount(*req.DiscountPercentage); err != nil {
-			return err
-		}
-	}
-	return domain.ValidateCategory(req.Category)
+	return apperrors.NewInternalServer(err.Error())
 }

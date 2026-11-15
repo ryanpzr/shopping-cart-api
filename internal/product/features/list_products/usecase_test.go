@@ -18,9 +18,12 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
+// The public listing always asks the repository for active products only.
+var activeOnly = shared.ProductFilters{Status: ptr(domain.StatusActive)}
+
 func TestList_MapsProductsAndMeta(t *testing.T) {
 	repo := new(mocks.Repository)
-	repo.On("FindAll", mock.Anything, shared.ProductFilters{}, 20, 0).Return([]domain.Product{
+	repo.On("FindAll", mock.Anything, activeOnly, 20, 0).Return([]domain.Product{
 		{ID: 1, Title: "A", Price: 100, DiscountPercentage: 20, Status: domain.StatusActive},
 		{ID: 2, Title: "B", Price: 10, Status: domain.StatusActive},
 	}, 2, nil)
@@ -48,6 +51,7 @@ func TestList_EmptyResultIsEmptyArray(t *testing.T) {
 func TestList_PassesTrimmedFilters(t *testing.T) {
 	repo := new(mocks.Repository)
 	want := shared.ProductFilters{
+		Status:   ptr(domain.StatusActive),
 		Category: ptr("Books"),
 		MinPrice: ptr(10.0),
 		MaxPrice: ptr(50.0),
@@ -65,7 +69,7 @@ func TestList_PassesTrimmedFilters(t *testing.T) {
 
 func TestList_BlankFiltersAreIgnored(t *testing.T) {
 	repo := new(mocks.Repository)
-	repo.On("FindAll", mock.Anything, shared.ProductFilters{}, 20, 0).Return([]domain.Product{}, 0, nil)
+	repo.On("FindAll", mock.Anything, activeOnly, 20, 0).Return([]domain.Product{}, 0, nil)
 
 	_, err := listproducts.NewUsecase(repo).List(context.Background(), listproducts.ListRequest{
 		Category: ptr(""), Search: ptr("   "),

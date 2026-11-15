@@ -56,7 +56,7 @@ func TestToggle_NotOwner(t *testing.T) {
 
 func TestToggle_NotFound(t *testing.T) {
 	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(nil, apperrors.NewNotFound("product not found"))
+	repo.On("FindByID", mock.Anything, 3).Return(nil, domain.ErrProductNotFound)
 
 	_, err := togglestatus.NewUsecase(repo).Toggle(context.Background(), 3, 7)
 

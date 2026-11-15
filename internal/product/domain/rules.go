@@ -3,8 +3,6 @@ package domain
 import (
 	"fmt"
 	"strings"
-
-	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
 
 // Field limits from sdd/specs/modules/03-product.md.
@@ -30,36 +28,57 @@ var Categories = []string{
 	"Office Supplies",
 }
 
+// ActiveOrderStatuses are the order statuses that block deleting a product (BR-PROD-006).
+var ActiveOrderStatuses = []string{"pending", "paid", "shipped"}
+
+// Validate checks every business rule of a product. Usecases call it on the
+// final entity, after applying a create or update request.
+func (p Product) Validate() error {
+	if err := ValidateTitle(p.Title); err != nil {
+		return err
+	}
+	if err := ValidatePrice(p.Price); err != nil {
+		return err
+	}
+	if err := ValidateDiscount(p.DiscountPercentage); err != nil {
+		return err
+	}
+	if err := ValidateQuantity(p.Quantity); err != nil {
+		return err
+	}
+	return ValidateCategory(p.Category)
+}
+
 func ValidateTitle(title string) error {
 	if strings.TrimSpace(title) == "" {
-		return apperrors.NewBadRequest("title is required")
+		return invalid("title", "title is required")
 	}
 	if len([]rune(title)) > MaxTitleLength {
-		return apperrors.NewBadRequest(fmt.Sprintf("title must be at most %d characters", MaxTitleLength))
+		return invalid("title", fmt.Sprintf("title must be at most %d characters", MaxTitleLength))
 	}
 	return nil
 }
 
 func ValidatePrice(price float64) error {
 	if price <= 0 {
-		return apperrors.NewBadRequest("price must be greater than 0")
+		return invalid("price", "price must be greater than 0")
 	}
 	if price > MaxPrice {
-		return apperrors.NewBadRequest("price must not exceed 1000000")
+		return invalid("price", "price must not exceed 1000000")
 	}
 	return nil
 }
 
 func ValidateDiscount(discount int) error {
 	if discount < 0 || discount > MaxDiscount {
-		return apperrors.NewBadRequest(fmt.Sprintf("discount_percentage must be between 0 and %d", MaxDiscount))
+		return invalid("discount_percentage", fmt.Sprintf("discount_percentage must be between 0 and %d", MaxDiscount))
 	}
 	return nil
 }
 
 func ValidateQuantity(quantity int) error {
 	if quantity < 0 {
-		return apperrors.NewBadRequest("quantity must be greater than or equal to 0")
+		return invalid("quantity", "quantity must be greater than or equal to 0")
 	}
 	return nil
 }
@@ -74,5 +93,5 @@ func ValidateCategory(category *string) error {
 			return nil
 		}
 	}
-	return apperrors.NewBadRequest("category must be one of: " + strings.Join(Categories, ", "))
+	return invalid("category", "category must be one of: "+strings.Join(Categories, ", "))
 }

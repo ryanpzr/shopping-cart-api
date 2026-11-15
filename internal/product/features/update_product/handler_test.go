@@ -39,13 +39,34 @@ func put(uc updateproduct.Usecase, path, body string) *httptest.ResponseRecorder
 func TestUpdateHandler_OK(t *testing.T) {
 	uc := new(mockUsecase)
 	uc.On("Update", mock.Anything, 3, 7, mock.MatchedBy(func(r updateproduct.UpdateRequest) bool {
-		return *r.Title == "New" && r.Price == nil
+		return r.Title.Set && *r.Title.Value == "New" && !r.Price.Set
 	})).Return(updateproduct.ProductResponse{ID: 3, Title: "New"}, nil)
 
 	w := put(uc, "/products/3", `{"title":"New"}`)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	uc.AssertExpectations(t)
+}
+
+func TestUpdateHandler_DistinguishesNullFromOmitted(t *testing.T) {
+	uc := new(mockUsecase)
+	uc.On("Update", mock.Anything, 3, 7, mock.MatchedBy(func(r updateproduct.UpdateRequest) bool {
+		return r.Category.Set && r.Category.Value == nil && // explicit null
+			!r.Photo.Set && // omitted
+			r.Price.Set && *r.Price.Value == 9.5
+	})).Return(updateproduct.ProductResponse{ID: 3}, nil)
+
+	w := put(uc, "/products/3", `{"category":null,"price":9.5}`)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	uc.AssertExpectations(t)
+}
+
+func TestUpdateHandler_WrongFieldType(t *testing.T) {
+	uc := new(mockUsecase)
+	w := put(uc, "/products/3", `{"price":"cheap"}`)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	uc.AssertNotCalled(t, "Update", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestUpdateHandler_InvalidID(t *testing.T) {

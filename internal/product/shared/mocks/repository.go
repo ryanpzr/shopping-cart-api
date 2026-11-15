@@ -1,4 +1,4 @@
-// Package mocks provides a testify mock of the product repository, shared by
+// Package mocks provides testify mocks of the product repositories, shared by
 // the feature tests.
 package mocks
 
@@ -33,8 +33,8 @@ func (m *Repository) Create(ctx context.Context, p domain.Product) (domain.Produ
 	return created, args.Error(1)
 }
 
-func (m *Repository) Update(ctx context.Context, id int, u shared.ProductUpdate) (domain.Product, error) {
-	args := m.Called(ctx, id, u)
+func (m *Repository) Update(ctx context.Context, p domain.Product) (domain.Product, error) {
+	args := m.Called(ctx, p)
 	updated, _ := args.Get(0).(domain.Product)
 	return updated, args.Error(1)
 }
@@ -47,7 +47,9 @@ func (m *Repository) Delete(ctx context.Context, id int) error {
 	return m.Called(ctx, id).Error(0)
 }
 
-func (m *Repository) HasActiveOrders(ctx context.Context, productID int) (bool, error) {
-	args := m.Called(ctx, productID)
+type OrderChecker struct{ mock.Mock }
+
+func (m *OrderChecker) HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error) {
+	args := m.Called(ctx, productID, statuses)
 	return args.Bool(0), args.Error(1)
 }
