@@ -32,12 +32,23 @@ internal/
       admin_manage_user/   # PATCH /admin/users/:id/ban|timeout|unban
       admin_activity_log/  # GET /admin/users/:id/activity (stub)
     routes.go    # Client and admin route mapping
-  product/       # Product module
-  cart/          # Cart module (in progress)
+  product/       # Product module (catalog, stock, delete guard)
+  cart/
+    domain/      # Cart, items, totals, stock rules
+    shared/      # Repository + unit of work (cart, product and order repos in one transaction)
+    features/
+      get_cart/             # GET /carts/me
+      add_item_to_cart/     # POST /carts/me/items
+      change_item_quantity/ # PATCH /carts/me/items/:itemId
+      remove_item/          # DELETE /carts/me/items/:itemId
+      checkout/             # POST /carts/me/checkout
+  order/         # Order domain and repository (written by checkout; endpoints in Phase 3)
 pkg/
   apperrors/     # Typed error handling
+  database/      # DBTX and WithinTx (transaction helper)
   jwt/           # JWT generate/parse
   middleware/    # Auth and role middleware
+  money/         # Money as integer cents (exact sums, NUMERIC and JSON support)
 sdd/specs/       # Business rules and module specifications
 db/migrations/   # SQL migration files
 ```
@@ -383,39 +394,46 @@ GET /api/v1/admin/users/:id/activity
 
 ### Products
 
-#### List all products
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /api/v1/products` | Public | Active products; filters `category`, `min_price`, `max_price`, `search`; `limit`/`offset` pagination |
+| `GET /api/v1/products/:id` | Public | Active product by id |
+| `POST /api/v1/products` | Token | Create; the seller is the authenticated user |
+| `PUT /api/v1/products/:id` | Owner | Partial update; `null` clears `photo`, `description`, `category` |
+| `PATCH /api/v1/products/:id/status` | Owner | Toggle `active` / `inactive` |
+| `DELETE /api/v1/products/:id` | Owner or admin | `409` while the product is in a pending, paid or shipped order |
 
-```
-GET /api/v1/products
-```
+Every product response includes `final_price` (price after the discount, rounded to cents). Full schemas and
+error responses are in [`openapi.yaml`](openapi.yaml).
 
-**Response `200`:**
+### Cart
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/v1/carts/me` | Active cart with items, `subtotal`, `discount_total` and `total` (created on first use) |
+| `POST /api/v1/carts/me/items` | Add `{ "product_id", "quantity" }`; the same product again sums the quantity |
+| `PATCH /api/v1/carts/me/items/:itemId` | Set `{ "quantity" }` (> 0) |
+| `DELETE /api/v1/carts/me/items/:itemId` | Remove the item |
+| `POST /api/v1/carts/me/checkout` | Place the order (`201`) |
+
+All cart routes require a token. Each item keeps a `price_snapshot` (sale price when added). **Checkout** runs in
+one transaction: it locks the cart and its products, re-validates every item, decrements the stock, creates a
+pending order and closes the cart, so concurrent checkouts cannot oversell. If a price changed since an item was
+added, checkout refreshes the cart and returns `409` instead of charging a price the buyer did not see.
 
 ```json
+POST /api/v1/carts/me/checkout  →  201
 {
-  "data": [
-    {
-      "id": 1,
-      "photo": "url",
-      "title": "Product Name",
-      "description": "...",
-      "price": 49.90,
-      "quantity": 10
-    }
-  ]
+  "id": 55,
+  "cart_id": 1,
+  "status": "pending",
+  "total_price": 384.84,
+  "items": [
+    { "product_id": 5, "quantity": 2, "unit_price": 199.90, "discount_percentage": 15, "sale_price": 169.92, "subtotal": 339.84 },
+    { "product_id": 8, "quantity": 1, "unit_price": 45.00, "discount_percentage": 0, "sale_price": 45.00, "subtotal": 45.00 }
+  ],
+  "created_at": "2026-11-26T22:40:00Z"
 }
-```
-
-#### Create product
-
-```
-POST /api/v1/products
-```
-
-#### Update product
-
-```
-PUT /api/v1/products/:productId
 ```
 
 ---
@@ -447,7 +465,7 @@ Every push and pull request runs the [CI workflow](.github/workflows/ci.yml): `g
 |---|---|---|
 | Auth | Done | [01-auth.md](sdd/specs/modules/01-auth.md) |
 | User | Done | [02-user.md](sdd/specs/modules/02-user.md) |
-| Product | Partial | [03-product.md](sdd/specs/modules/03-product.md) |
-| Cart | In progress | [04-cart.md](sdd/specs/modules/04-cart.md) |
-| Order | Planned | [05-order.md](sdd/specs/modules/05-order.md) |
+| Product | Done | [03-product.md](sdd/specs/modules/03-product.md) |
+| Cart | Done | [04-cart.md](sdd/specs/modules/04-cart.md) |
+| Order | Partial — created by checkout; endpoints planned | [05-order.md](sdd/specs/modules/05-order.md) |
 | Activity Log | Planned | [06-activity-log.md](sdd/specs/modules/06-activity-log.md) |
