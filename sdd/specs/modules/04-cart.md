@@ -145,6 +145,6 @@ use a fake unit of work.
 - [x] `internal/order/domain` and `internal/order/shared` — order entity and `Create`
 - [x] `internal/cart/features/get_cart/`, `add_item_to_cart/`, `change_item_quantity/`, `remove_item/`, `checkout/` — handler, usecase, ports, dtos, tests
 - [x] `internal/cart/routes.go` — map all routes; wired in `setup.go` and `routes.go`
-- [x] Product delete guard uses the real `OrderRepository`
+- [x] Product delete guard uses the order repository (`HasOrdersWithStatus`, moved to `internal/order/shared`)
 - [x] Manual test: get cart → add item → add same item again (quantity sums) → update quantity → remove item → price change → checkout; concurrent checkouts for the last units
 - [ ] Activity log events (`cart_checkout`, `order_placed`) — module 06, through the outbox

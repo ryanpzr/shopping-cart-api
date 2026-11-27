@@ -401,7 +401,7 @@ GET /api/v1/admin/users/:id/activity
 | `POST /api/v1/products` | Token | Create; the seller is the authenticated user |
 | `PUT /api/v1/products/:id` | Owner | Partial update; `null` clears `photo`, `description`, `category` |
 | `PATCH /api/v1/products/:id/status` | Owner | Toggle `active` / `inactive` |
-| `DELETE /api/v1/products/:id` | Owner or admin | `409` while the product is in a pending, paid or shipped order |
+| `DELETE /api/v1/products/:id` | Owner or admin | `409` while any order references the product; removes it from carts |
 
 Every product response includes `final_price` (price after the discount, rounded to cents). Full schemas and
 error responses are in [`openapi.yaml`](openapi.yaml).

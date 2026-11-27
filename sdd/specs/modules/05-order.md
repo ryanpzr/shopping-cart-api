@@ -36,7 +36,7 @@
 ```sql
 CREATE TABLE orders (
     id          SERIAL PRIMARY KEY,
-    cart_id     INTEGER       NOT NULL REFERENCES carts(id),
+    cart_id     INTEGER       NOT NULL UNIQUE REFERENCES carts(id),  -- one order per cart
     buyer_id    INTEGER       NOT NULL REFERENCES users(id),
     total_price NUMERIC(10,2) NOT NULL,
     status      VARCHAR(15)   NOT NULL DEFAULT 'pending'
@@ -112,7 +112,7 @@ and `total_price` is the sum of the lines. Amounts use `pkg/money` (integer cent
 
 **Product delete guard (BR-PROD-006).** The delete usecase asks an `OrderChecker` whether the product
 is in orders with `domain.ActiveOrderStatuses` (`pending`, `paid`, `shipped`).
-`shared.OrderRepository.HasOrdersWithStatus` (`internal/product/shared/orders.go`) joins `order_items`
+`HasOrdersWithStatus` in the order repository (`internal/order/shared`) joins `order_items`
 (by `product_id`) with `orders` and filters `orders.status = ANY($2)`. It is wired in `setup.go` since
 Phase 2, when checkout started creating orders. Keep the table and column names above
 (`order_items.product_id`, `order_items.order_id`, `orders.status`).
@@ -123,9 +123,10 @@ in two statements, while checkout can now create orders concurrently. Run both i
 
 **Open question — deleting products with past orders.** `order_items.product_id` references
 `products(id)` with the default `NO ACTION`, so a hard delete of a product that appears in a
-`delivered` or `cancelled` order will fail on the foreign key. Decide in this module whether to
-keep product rows (soft delete), use `ON DELETE SET NULL` on a nullable `product_id`, or block
-the delete with `ErrConflict`.
+`delivered` or `cancelled` order fails on the foreign key. Since Phase 2 the product repository maps
+that violation to `ErrProductInUse` and the delete answers `409` instead of `500`; this also covers an
+order placed between the active-order check and the delete. Decide in this module whether that stays
+the policy or becomes a soft delete / `ON DELETE SET NULL` on a nullable `product_id`.
 
 ## Implementation Checklist
 
