@@ -8,6 +8,14 @@ import (
 	"fmt"
 )
 
+// DBTX is satisfied by both *sql.DB and *sql.Tx, so repositories can run
+// inside a transaction owned by the caller.
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // WithinTx runs fn inside a transaction. It commits when fn returns nil and
 // rolls back when fn returns an error or panics.
 func WithinTx(ctx context.Context, db *sql.DB, fn func(tx *sql.Tx) error) (err error) {

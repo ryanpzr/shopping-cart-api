@@ -10,15 +10,12 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
+	"github.com/ryanpzr/shopping-cart-api/pkg/database"
 )
 
 // DBTX is satisfied by both *sql.DB and *sql.Tx, so the repository can run
 // inside a transaction owned by the caller (e.g. checkout, outbox events).
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type DBTX = database.DBTX
 
 // ProductFilters narrows FindAll. Nil fields are not applied; the repository
 // adds no implicit condition, so visibility rules belong to the caller.
