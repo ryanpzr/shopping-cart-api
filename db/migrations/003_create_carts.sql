@@ -19,7 +19,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_carts_one_active_per_buyer ON carts(buyer_i
 CREATE TABLE IF NOT EXISTS cart_items (
     id             SERIAL PRIMARY KEY,
     cart_id        INTEGER       NOT NULL REFERENCES carts(id),
-    product_id     INTEGER       NOT NULL REFERENCES products(id),
+    -- Deleting a product removes it from carts; purchase history lives in order_items.
+    product_id     INTEGER       NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     quantity       INTEGER       NOT NULL CHECK (quantity > 0),
     price_snapshot NUMERIC(10,2) NOT NULL,
     created_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
