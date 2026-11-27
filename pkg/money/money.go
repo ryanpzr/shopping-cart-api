@@ -29,6 +29,12 @@ func (m Money) Cents() int64 { return int64(m) }
 // Mul multiplies the amount by an integer quantity.
 func (m Money) Mul(quantity int) Money { return m * Money(quantity) }
 
+// ApplyDiscount returns the amount minus percent%, rounded half up to cents.
+// percent must be between 0 and 100 and the amount must not be negative.
+func (m Money) ApplyDiscount(percent int) Money {
+	return (m*Money(100-percent) + 50) / 100
+}
+
 // Float64 returns the amount as a decimal number (for display and JSON).
 func (m Money) Float64() float64 { return float64(m) / 100 }
 

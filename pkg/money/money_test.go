@@ -45,6 +45,24 @@ func TestArithmeticIsExact(t *testing.T) {
 	assert.Equal(t, "100.00", total.String())
 }
 
+func TestApplyDiscount(t *testing.T) {
+	tests := []struct {
+		cents    int64
+		percent  int
+		expected string
+	}{
+		{10000, 0, "100.00"},
+		{10000, 10, "90.00"},
+		{19990, 15, "169.92"}, // 169.915 rounds up
+		{1005, 50, "5.03"},    // 5.025 rounds up
+		{1000, 33, "6.70"},
+		{5990, 100, "0.00"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, money.FromCents(tt.cents).ApplyDiscount(tt.percent).String())
+	}
+}
+
 func TestFromFloat(t *testing.T) {
 	assert.Equal(t, int64(16992), money.FromFloat(169.915).Cents()) // rounds half up
 	assert.Equal(t, int64(8990), money.FromFloat(89.9).Cents())

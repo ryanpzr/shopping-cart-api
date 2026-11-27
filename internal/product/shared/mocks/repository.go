@@ -47,6 +47,16 @@ func (m *Repository) Delete(ctx context.Context, id int) error {
 	return m.Called(ctx, id).Error(0)
 }
 
+func (m *Repository) LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error) {
+	args := m.Called(ctx, ids)
+	products, _ := args.Get(0).([]domain.Product)
+	return products, args.Error(1)
+}
+
+func (m *Repository) UpdateStock(ctx context.Context, id, quantity int) error {
+	return m.Called(ctx, id, quantity).Error(0)
+}
+
 type OrderChecker struct{ mock.Mock }
 
 func (m *OrderChecker) HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error) {

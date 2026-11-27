@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lib/pq"
+
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 )
 
@@ -38,6 +40,10 @@ type Repository interface {
 	Update(ctx context.Context, p domain.Product) (domain.Product, error)
 	UpdateStatus(ctx context.Context, id int, status string) error
 	Delete(ctx context.Context, id int) error
+	// LockByIDs loads the products with SELECT … FOR UPDATE. It must run
+	// inside a transaction; missing ids are simply absent from the result.
+	LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error)
+	UpdateStock(ctx context.Context, id, quantity int) error
 }
 
 type repository struct {
@@ -183,7 +189,36 @@ func (r *repository) Delete(ctx context.Context, id int) error {
 	return requireAffected(result, "delete")
 }
 
-var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+func (r *repository) LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error) {
+	rows, err := r.db.QueryContext(ctx, queryLockByIDs, pq.Array(ids))
+	if err != nil {
+		return nil, wrap("lock by ids", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	products := make([]domain.Product, 0, len(ids))
+	for rows.Next() {
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, wrap("scan", err)
+		}
+		products = append(products, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrap("iterate", err)
+	}
+	return products, nil
+}
+
+func (r *repository) UpdateStock(ctx context.Context, id, quantity int) error {
+	result, err := r.db.ExecContext(ctx, queryUpdateStock, quantity, id)
+	if err != nil {
+		return wrap("update stock", err)
+	}
+	return requireAffected(result, "update stock")
+}
+
+var likeEscaper =strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // escapeLike makes LIKE wildcards in user input match literally, so a search
 // for "50%" does not match every title containing "50".
