@@ -119,7 +119,7 @@ without a migration.
 - [x] Migration SQL — `db/migrations/002_create_products.sql` (`products` table + indexes)
 - [x] `internal/product/domain/product.go` — full entity, `FinalPrice()`; field rules in `domain/rules.go`
 - [x] `internal/product/shared/repository.go` — `FindAll` (with filters, including `Status`), `FindByID`, `Create`, `Update` (whole entity), `UpdateStatus`, `Delete`; takes `context.Context` and a `DBTX` (`*sql.DB` or `*sql.Tx`); returns `domain.ErrProductNotFound` or wrapped errors, never `apperrors`
-- [x] `internal/product/shared/orders.go` — `OrderRepository.HasOrdersWithStatus`, and the `NoOrders` stub wired in `setup.go` until module 05
+- [x] `internal/product/shared/orders.go` — `OrderRepository.HasOrdersWithStatus`, wired in `setup.go` (a `NoOrders` stub stood in until the order tables arrived in Phase 2)
 - [x] `internal/product/features/list_products/` — handler, usecase, ports, dtos, tests
 - [x] `internal/product/features/get_product/` — handler, usecase, ports, dtos, tests
 - [x] `internal/product/features/create_product/` — handler, usecase, ports, dtos, tests
