@@ -101,6 +101,8 @@ func TestUpdate_AcceptsZeroQuantity(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 0, resp.Quantity)
+	assert.Equal(t, "Old", resp.Title, "the saved product is echoed back, not a zero value")
+	assert.Equal(t, 100.0, resp.Price)
 }
 
 func TestUpdate_NotOwner(t *testing.T) {

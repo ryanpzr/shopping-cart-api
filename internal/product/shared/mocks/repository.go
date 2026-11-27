@@ -33,8 +33,12 @@ func (m *Repository) Create(ctx context.Context, p domain.Product) (domain.Produ
 	return created, args.Error(1)
 }
 
+// Update accepts a fixed product or a func(ctx, product) Product as return value.
 func (m *Repository) Update(ctx context.Context, p domain.Product) (domain.Product, error) {
 	args := m.Called(ctx, p)
+	if fn, ok := args.Get(0).(func(context.Context, domain.Product) domain.Product); ok {
+		return fn(ctx, p), args.Error(1)
+	}
 	updated, _ := args.Get(0).(domain.Product)
 	return updated, args.Error(1)
 }
