@@ -10,12 +10,11 @@ import (
 )
 
 type usecase struct {
-	repo Repository
-	uow  UnitOfWork
+	uow UnitOfWork
 }
 
-func NewUsecase(repo Repository, uow UnitOfWork) Usecase {
-	return &usecase{repo: repo, uow: uow}
+func NewUsecase(uow UnitOfWork) Usecase {
+	return &usecase{uow: uow}
 }
 
 // ChangeQuantity implements BR-CART-004: sets the item quantity after checking
@@ -28,6 +27,7 @@ func (u *usecase) ChangeQuantity(ctx context.Context, buyerID, itemID int, req C
 		return CartResponse{}, toAppError(err)
 	}
 
+	var result domain.Cart
 	err := u.uow.Do(ctx, func(r TxRepositories) error {
 		cart, err := r.Carts.LockByBuyer(ctx, buyerID, domain.StatusActive)
 		if errors.Is(err, domain.ErrCartNotFound) {
@@ -51,17 +51,18 @@ func (u *usecase) ChangeQuantity(ctx context.Context, buyerID, itemID int, req C
 		}
 
 		item.Quantity = *req.Quantity
-		return r.Carts.UpdateItem(ctx, item)
+		if err := r.Carts.UpdateItem(ctx, item); err != nil {
+			return err
+		}
+
+		// Read the result in the same transaction, while the cart is still locked.
+		result, err = r.Carts.FindByBuyer(ctx, buyerID, domain.StatusActive)
+		return err
 	})
 	if err != nil {
 		return CartResponse{}, toAppError(err)
 	}
-
-	cart, err := u.repo.FindByBuyer(ctx, buyerID, domain.StatusActive)
-	if err != nil {
-		return CartResponse{}, toAppError(err)
-	}
-	return toResponse(cart), nil
+	return toResponse(result), nil
 }
 
 func toAppError(err error) error {

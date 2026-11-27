@@ -10,4 +10,7 @@ type Usecase interface {
 	RemoveItem(ctx context.Context, buyerID, itemID int) (CartResponse, error)
 }
 
-type Repository = shared.Repository
+type (
+	UnitOfWork     = shared.UnitOfWork
+	TxRepositories = shared.TxRepositories
+)

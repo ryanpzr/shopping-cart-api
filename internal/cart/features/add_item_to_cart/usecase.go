@@ -35,6 +35,7 @@ func (u *usecase) AddItem(ctx context.Context, buyerID int, req AddItemRequest) 
 		return CartResponse{}, toAppError(err)
 	}
 
+	var result domain.Cart
 	err := u.uow.Do(ctx, func(r TxRepositories) error {
 		cart, err := r.Carts.LockByBuyer(ctx, buyerID, domain.StatusActive)
 		if err != nil {
@@ -64,22 +65,24 @@ func (u *usecase) AddItem(ctx context.Context, buyerID int, req AddItemRequest) 
 		item.Quantity = quantity
 		item.PriceSnapshot = product.SalePrice()
 		if exists {
-			return r.Carts.UpdateItem(ctx, item)
+			err = r.Carts.UpdateItem(ctx, item)
+		} else {
+			item.CartID = cart.ID
+			item.ProductID = product.ID
+			_, err = r.Carts.AddItem(ctx, item)
 		}
-		item.CartID = cart.ID
-		item.ProductID = product.ID
-		_, err = r.Carts.AddItem(ctx, item)
+		if err != nil {
+			return err
+		}
+
+		// Read the result in the same transaction, while the cart is still locked.
+		result, err = r.Carts.FindByBuyer(ctx, buyerID, domain.StatusActive)
 		return err
 	})
 	if err != nil {
 		return CartResponse{}, toAppError(err)
 	}
-
-	cart, err := u.repo.FindByBuyer(ctx, buyerID, domain.StatusActive)
-	if err != nil {
-		return CartResponse{}, toAppError(err)
-	}
-	return toResponse(cart), nil
+	return toResponse(result), nil
 }
 
 // ensureActiveCart creates the buyer's active cart when there is none.

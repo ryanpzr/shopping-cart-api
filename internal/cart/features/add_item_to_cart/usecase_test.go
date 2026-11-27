@@ -44,6 +44,7 @@ func newFixture(c domain.Cart, product *productdomain.Product) fixture {
 	repo.On("FindByBuyer", mock.Anything, buyer, domain.StatusActive).Return(c, nil)
 	uow := mocks.NewUnitOfWork()
 	uow.Carts.On("LockByBuyer", mock.Anything, buyer, domain.StatusActive).Return(c, nil)
+	uow.Carts.On("FindByBuyer", mock.Anything, buyer, domain.StatusActive).Return(c, nil).Maybe() // result read inside the transaction
 	uow.Products.On("FindByID", mock.Anything, 5).Return(product, nil)
 	return fixture{repo: repo, uow: uow, uc: additemtocart.NewUsecase(repo, uow)}
 }
@@ -134,8 +135,8 @@ func TestAddItem_CreatesCartOnFirstUse(t *testing.T) {
 	repo := new(mocks.Repository)
 	repo.On("FindByBuyer", mock.Anything, buyer, domain.StatusActive).Return(nil, domain.ErrCartNotFound).Once()
 	repo.On("Create", mock.Anything, buyer, domain.StatusActive).Return(domain.Cart{ID: 1}, nil)
-	repo.On("FindByBuyer", mock.Anything, buyer, domain.StatusActive).Return(domain.Cart{ID: 1}, nil)
 	uow := mocks.NewUnitOfWork()
+	uow.Carts.On("FindByBuyer", mock.Anything, buyer, domain.StatusActive).Return(domain.Cart{ID: 1}, nil)
 	uow.Carts.On("LockByBuyer", mock.Anything, buyer, domain.StatusActive).Return(domain.Cart{ID: 1}, nil)
 	uow.Products.On("FindByID", mock.Anything, 5).Return(lamp(), nil)
 	uow.Carts.On("AddItem", mock.Anything, mock.Anything).Return(domain.Item{ID: 10}, nil)

@@ -59,8 +59,8 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 	hdCart := cart.CartHandlers{
 		Get:            getcart.NewHandler(getcart.NewUsecase(rpCart)),
 		AddItem:        additemtocart.NewHandler(additemtocart.NewUsecase(rpCart, uow)),
-		ChangeQuantity: changeitemquantity.NewHandler(changeitemquantity.NewUsecase(rpCart, uow)),
-		RemoveItem:     removeitem.NewHandler(removeitem.NewUsecase(rpCart)),
+		ChangeQuantity: changeitemquantity.NewHandler(changeitemquantity.NewUsecase(uow)),
+		RemoveItem:     removeitem.NewHandler(removeitem.NewUsecase(uow)),
 		Checkout:       checkout.NewHandler(checkout.NewUsecase(uow)),
 	}
 

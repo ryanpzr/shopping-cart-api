@@ -11,7 +11,6 @@ type Usecase interface {
 }
 
 type (
-	Repository     = shared.Repository
 	UnitOfWork     = shared.UnitOfWork
 	TxRepositories = shared.TxRepositories
 )
