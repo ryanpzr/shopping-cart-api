@@ -215,7 +215,7 @@ func (r *repository) UpdateStock(ctx context.Context, id, quantity int) error {
 	return requireAffected(result, "update stock")
 }
 
-var likeEscaper =strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // escapeLike makes LIKE wildcards in user input match literally, so a search
 // for "50%" does not match every title containing "50".
