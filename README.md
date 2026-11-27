@@ -42,7 +42,15 @@ internal/
       change_item_quantity/ # PATCH /carts/me/items/:itemId
       remove_item/          # DELETE /carts/me/items/:itemId
       checkout/             # POST /carts/me/checkout
-  order/         # Order domain and repository (written by checkout; endpoints in Phase 3)
+  order/
+    domain/        # Order, status transitions, stock restore calculation
+    shared/        # Repository + unit of work (order and product repos in one transaction)
+    cancellation/  # Cancel an order and give the stock back (buyer and admin share it)
+    features/
+      list_orders/          # GET /orders/me
+      get_order/            # GET /orders/:id
+      cancel_order/         # PATCH /orders/:id/cancel
+      admin_update_status/  # PATCH /admin/orders/:id/status
 pkg/
   apperrors/     # Typed error handling
   database/      # DBTX and WithinTx (transaction helper)
@@ -401,7 +409,7 @@ GET /api/v1/admin/users/:id/activity
 | `POST /api/v1/products` | Token | Create; the seller is the authenticated user |
 | `PUT /api/v1/products/:id` | Owner | Partial update; `null` clears `photo`, `description`, `category` |
 | `PATCH /api/v1/products/:id/status` | Owner | Toggle `active` / `inactive` |
-| `DELETE /api/v1/products/:id` | Owner or admin | `409` while any order references the product; removes it from carts |
+| `DELETE /api/v1/products/:id` | Owner or admin | `409` while any order references the product; removes it from carts. Runs in one transaction with the product row locked |
 
 Every product response includes `final_price` (price after the discount, rounded to cents). Full schemas and
 error responses are in [`openapi.yaml`](openapi.yaml).
@@ -436,6 +444,35 @@ POST /api/v1/carts/me/checkout  →  201
 }
 ```
 
+### Orders
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /api/v1/orders/me` | Token | Your orders, newest first, with items; `limit`/`offset` pagination |
+| `GET /api/v1/orders/:id` | Owner or admin | One order; someone else's order is `403` |
+| `PATCH /api/v1/orders/:id/cancel` | Owner | Cancel a `pending` order; the stock goes back to the products |
+| `PATCH /api/v1/admin/orders/:id/status` | Admin | Body `{ "status": "paid" }`; one step at a time |
+
+Status lifecycle: `pending → paid → shipped → delivered`, and `pending → cancelled`. Skipping a step, going
+backwards or changing a `cancelled` or `delivered` order is a `409`. Cancelling (by the buyer or the admin) gives
+the stock back in the same transaction, with the order row locked, so concurrent cancellations never restore it
+twice. Deleting a product that appears in any order is a `409`: deactivate it instead.
+
+```json
+PATCH /api/v1/admin/orders/55/status  { "status": "paid" }  →  200
+{
+  "id": 55,
+  "cart_id": 1,
+  "status": "paid",
+  "total_price": 384.84,
+  "items": [
+    { "product_id": 5, "title": "Mechanical Keyboard", "quantity": 2, "unit_price": 199.90, "discount_percentage": 15, "sale_price": 169.92, "subtotal": 339.84 }
+  ],
+  "created_at": "2026-11-26T22:40:00Z",
+  "updated_at": "2026-11-26T22:55:00Z"
+}
+```
+
 ---
 
 ## User Roles
@@ -467,5 +504,5 @@ Every push and pull request runs the [CI workflow](.github/workflows/ci.yml): `g
 | User | Done | [02-user.md](sdd/specs/modules/02-user.md) |
 | Product | Done | [03-product.md](sdd/specs/modules/03-product.md) |
 | Cart | Done | [04-cart.md](sdd/specs/modules/04-cart.md) |
-| Order | Partial — created by checkout; endpoints planned | [05-order.md](sdd/specs/modules/05-order.md) |
+| Order | Done | [05-order.md](sdd/specs/modules/05-order.md) |
 | Activity Log | Planned | [06-activity-log.md](sdd/specs/modules/06-activity-log.md) |

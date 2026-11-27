@@ -122,6 +122,8 @@ Marketplace-style shopping cart API. Reference this document before implementing
 **BR-PROD-006 — Delete product**
 - Hard delete from database
 - Cannot delete if product has orders with `status = pending`, `paid`, or `shipped` → `ErrConflict`
+- Any other order that still references the product (delivered, cancelled) also blocks the delete → `ErrConflict`; the seller deactivates it instead
+- Check and delete run in one transaction with the product row locked, so a concurrent checkout cannot slip an order in between
 - Admin can delete any product; client can only delete their own → `ErrForbidden`
 
 ---
@@ -172,20 +174,29 @@ Marketplace-style shopping cart API. Reference this document before implementing
 
 | Rule | Endpoint | Method | Auth |
 |---|---|---|---|
-| BR-ORDER-001 | `/orders/me` | GET | Client |
-| BR-ORDER-002 | `/orders/:id` | GET | Client (owner) or Admin |
-| BR-ORDER-003 | `/orders/:id/cancel` | PATCH | Client (owner) |
+| BR-ORDER-001 | `/orders/me` | GET | Authenticated |
+| BR-ORDER-002 | `/orders/:id` | GET | Owner or Admin |
+| BR-ORDER-003 | `/orders/:id/cancel` | PATCH | Owner |
 | BR-ADMIN-ORDER-001 | `/admin/orders/:id/status` | PATCH | Admin |
 
+**BR-ORDER-001 — List own orders**
+- Own orders only, newest first, with items; paginated (`limit` default 20, max 100, `offset`)
+
+**BR-ORDER-002 — Get order by ID**
+- Not found → `ErrNotFound`; someone else's order → `ErrForbidden` (admin can read any)
+
 **BR-ORDER-003 — Cancel order**
+- Owner only → `ErrForbidden`
 - Only cancellable if `status = pending` → `ErrConflict` otherwise
-- Restores `product.quantity` for each item
+- Restores `product.quantity` for each item, in the same transaction
 - Sets `status = cancelled`
 
 **BR-ADMIN-ORDER-001 — Update order status**
-- Valid transitions only: `pending → paid → shipped → delivered`
-- Cannot go backwards → `ErrConflict`
-- Cannot modify a `cancelled` order → `ErrConflict`
+- One step at a time: `pending → paid → shipped → delivered`, or `pending → cancelled`
+- Skipping a step, going backwards or repeating the status → `ErrConflict`
+- Cannot modify a `cancelled` or `delivered` order → `ErrConflict`
+- `cancelled` restores the stock like the buyer's cancellation
+- Unknown or missing `status` → `ErrBadRequest`
 
 ---
 

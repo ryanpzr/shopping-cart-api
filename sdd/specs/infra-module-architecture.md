@@ -189,6 +189,8 @@ Dependencies that do not exist yet are injected as explicit stubs in `setup.go` 
 - Row locks (`SELECT … FOR UPDATE`) are repository methods named `Lock…`. Lock several rows in a fixed order
   (by id) to avoid deadlocks.
 - Tests use a fake unit of work that runs the function with mocks and records whether it would commit.
+- A unit of work lives in the module whose repositories it needs, or in the feature when the dependency would be circular. The order module depends on the product repository (stock), so the product delete, which also needs the order repository, has its own unit of work inside the `delete_product` feature.
+- Several rows touched by one operation are locked in a fixed order: the document of the operation first (cart, order or product), then the related products by id. See the locking order in `05-order.md`.
 
 ### Money
 
