@@ -38,13 +38,19 @@ const (
 
 	queryDelete = `DELETE FROM products WHERE id = $1`
 
-	queryHasOrdersWithStatus = `
-		SELECT EXISTS (
-			SELECT 1
-			FROM order_items oi
-			JOIN orders o ON o.id = oi.order_id
-			WHERE oi.product_id = $1
-			  AND o.status = ANY($2)
-		)
+	// Locks rows in id order, so concurrent checkouts always lock products in
+	// the same order and cannot deadlock each other.
+	queryLockByIDs = `
+		SELECT ` + productColumns + `
+		FROM products
+		WHERE id = ANY($1)
+		ORDER BY id
+		FOR UPDATE
+	`
+
+	queryUpdateStock = `
+		UPDATE products
+		SET quantity = $1, updated_at = NOW()
+		WHERE id = $2
 	`
 )

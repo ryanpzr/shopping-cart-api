@@ -1,55 +1,42 @@
 package changeitemquantity
 
-// import (
-// 	"github.com/gin-gonic/gin"
-// 	"github.com/ryanpzr/shopping-cart-api/internal/service"
-// )
+import (
+	"net/http"
+	"strconv"
 
-// func NewCartHandler(sv service.Cart) HandlerCart {
-// 	return &handlerCart{
-// 		sv: sv,
-// 	}
-// }
+	"github.com/gin-gonic/gin"
+	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+)
 
-// type HandlerCart interface {
-// 	GetAllProductsAvailable(ctx *gin.Context)
-// 	PostProductCart(ctx *gin.Context)
-// 	DeleteProductCart(ctx *gin.Context)
-// 	GetAllProductsCart(ctx *gin.Context)
-// 	IncreaseProductCart(ctx *gin.Context)
-// 	DecreaseProductCart(ctx *gin.Context)
-// }
+type Handler interface {
+	ChangeQuantity(c *gin.Context)
+}
 
-// type handlerCart struct {
-// 	sv service.Cart
-// }
+type handler struct {
+	usecase Usecase
+}
 
-// func (h handlerCart) GetAllProductsAvailable(ctx *gin.Context) {
-// 	//TODO implement me
-// 	panic("implement me")
-// }
+func NewHandler(uc Usecase) Handler {
+	return &handler{usecase: uc}
+}
 
-// func (h handlerCart) PostProductCart(ctx *gin.Context) {
-// 	//TODO implement me
-// 	panic("implement me")
-// }
+func (h *handler) ChangeQuantity(c *gin.Context) {
+	itemID, err := strconv.Atoi(c.Param("itemId"))
+	if err != nil || itemID < 1 {
+		apperrors.HandleError(c, apperrors.NewBadRequest("invalid item id"))
+		return
+	}
 
-// func (h handlerCart) DeleteProductCart(ctx *gin.Context) {
-// 	//TODO implement me
-// 	panic("implement me")
-// }
+	var req ChangeQuantityRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperrors.HandleError(c, apperrors.NewBadRequest("invalid request body"))
+		return
+	}
 
-// func (h handlerCart) GetAllProductsCart(ctx *gin.Context) {
-// 	//TODO implement me
-// 	panic("implement me")
-// }
-
-// func (h handlerCart) IncreaseProductCart(ctx *gin.Context) {
-// 	//TODO implement me
-// 	panic("implement me")
-// }
-
-// func (h handlerCart) DecreaseProductCart(ctx *gin.Context) {
-// 	//TODO implement me
-// 	panic("implement me")
-// }
+	resp, err := h.usecase.ChangeQuantity(c.Request.Context(), c.GetInt("user_id"), itemID, req)
+	if err != nil {
+		apperrors.HandleError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}

@@ -1,5 +1,0 @@
-package cart
-
-func Setup() {
-
-}

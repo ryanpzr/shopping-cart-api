@@ -1,12 +1,17 @@
 package additemtocart
 
 import (
-	"github.com/gin-gonic/gin"
+	"context"
+
 	"github.com/ryanpzr/shopping-cart-api/internal/cart/shared"
 )
 
 type Usecase interface {
-	Execute(ctx *gin.Context) error
+	AddItem(ctx context.Context, buyerID int, req AddItemRequest) (CartResponse, error)
 }
 
-type Repository = shared.Repository
+type (
+	Repository     = shared.Repository
+	UnitOfWork     = shared.UnitOfWork
+	TxRepositories = shared.TxRepositories
+)

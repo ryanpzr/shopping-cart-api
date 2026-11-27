@@ -146,8 +146,8 @@ Marketplace-style shopping cart API. Reference this document before implementing
 - Product must exist and be `active` → `ErrNotFound`
 - `product.seller_id` must ≠ `current_user_id` → `ErrForbidden` (no self-purchase)
 - `product.quantity` must be >= requested quantity → `ErrConflict` if insufficient stock
-- If the item is already in the cart: add quantities together, re-validate combined total against stock
-- Stores `price_snapshot = price * (1 - discount_percentage / 100)` at the moment of add
+- If the item is already in the cart: add quantities together, re-validate combined total against stock, refresh the price snapshot
+- Stores `price_snapshot = price * (1 - discount_percentage / 100)`, rounded half up to cents, at the moment of add
 
 **BR-CART-003 — Remove item from cart**
 - `ErrNotFound` if item does not belong to the user's active cart
@@ -157,7 +157,10 @@ Marketplace-style shopping cart API. Reference this document before implementing
 - Re-validates new quantity against current product stock → `ErrConflict` if insufficient
 
 **BR-CART-005 — Checkout**
-- Re-validates all items: product active, stock sufficient, no self-purchase
+- Runs in one transaction with the cart and its products locked: concurrent checkouts cannot oversell
+- Empty cart → `ErrConflict`
+- Re-validates all items: product active (`ErrConflict`), stock sufficient (`ErrConflict`), no self-purchase (`ErrForbidden`)
+- If a price changed since the item was added: refreshes the snapshots, places no order → `ErrConflict`; checking out again uses the new prices
 - Decrements `product.quantity` for each item
 - Creates `Order` (`status = pending`) + `OrderItem` records with price/discount snapshots
 - Marks cart `status = checked_out`

@@ -110,6 +110,8 @@ without a migration.
 **BR-PROD-006 — Delete product**
 - Hard delete from database
 - Cannot delete if product has orders with `status IN ('pending', 'paid', 'shipped')` → `ErrConflict` (409)
+- Any other order item that still references the product (e.g. a delivered or cancelled order) also blocks the delete → `ErrConflict` (409); the long-term policy is decided in `05-order.md`
+- Removes the product from carts (`cart_items` cascade)
 - Owner can delete own product; admin can delete any product
 - Non-owner client → `ErrForbidden` (403)
 - Emits `product_deleted` activity log event
@@ -119,7 +121,7 @@ without a migration.
 - [x] Migration SQL — `db/migrations/002_create_products.sql` (`products` table + indexes)
 - [x] `internal/product/domain/product.go` — full entity, `FinalPrice()`; field rules in `domain/rules.go`
 - [x] `internal/product/shared/repository.go` — `FindAll` (with filters, including `Status`), `FindByID`, `Create`, `Update` (whole entity), `UpdateStatus`, `Delete`; takes `context.Context` and a `DBTX` (`*sql.DB` or `*sql.Tx`); returns `domain.ErrProductNotFound` or wrapped errors, never `apperrors`
-- [x] `internal/product/shared/orders.go` — `OrderRepository.HasOrdersWithStatus`, and the `NoOrders` stub wired in `setup.go` until module 05
+- [x] Delete guard through the `OrderChecker` port, implemented by the order repository (`internal/order/shared`, `HasOrdersWithStatus`); a `NoOrders` stub stood in until the order tables arrived in Phase 2. A product still referenced by any order item (e.g. delivered/cancelled) answers `409` (`domain.ErrProductInUse`)
 - [x] `internal/product/features/list_products/` — handler, usecase, ports, dtos, tests
 - [x] `internal/product/features/get_product/` — handler, usecase, ports, dtos, tests
 - [x] `internal/product/features/create_product/` — handler, usecase, ports, dtos, tests

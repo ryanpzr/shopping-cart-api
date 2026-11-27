@@ -7,6 +7,14 @@ import (
 	"github.com/ryanpzr/shopping-cart-api/internal/app/route"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/login"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/register"
+	"github.com/ryanpzr/shopping-cart-api/internal/cart"
+	additemtocart "github.com/ryanpzr/shopping-cart-api/internal/cart/features/add_item_to_cart"
+	changeitemquantity "github.com/ryanpzr/shopping-cart-api/internal/cart/features/change_item_quantity"
+	"github.com/ryanpzr/shopping-cart-api/internal/cart/features/checkout"
+	getcart "github.com/ryanpzr/shopping-cart-api/internal/cart/features/get_cart"
+	removeitem "github.com/ryanpzr/shopping-cart-api/internal/cart/features/remove_item"
+	cartshared "github.com/ryanpzr/shopping-cart-api/internal/cart/shared"
+	ordershared "github.com/ryanpzr/shopping-cart-api/internal/order/shared"
 	"github.com/ryanpzr/shopping-cart-api/internal/product"
 	createproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/create_product"
 	deleteproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/delete_product"
@@ -42,8 +50,19 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
 		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
-		// Orders arrive in Phase 3: swap NoOrders for productshared.NewOrderRepository(conn) then.
-		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, productshared.NoOrders{})),
+		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, ordershared.NewRepository(conn))),
+	}
+
+	// Cart features: mutations and checkout run through a unit of work, so
+	// cart, product and order repositories share one transaction.
+	rpCart := cartshared.NewRepository(conn)
+	uow := cartshared.NewUnitOfWork(conn)
+	hdCart := cart.CartHandlers{
+		Get:            getcart.NewHandler(getcart.NewUsecase(rpCart)),
+		AddItem:        additemtocart.NewHandler(additemtocart.NewUsecase(rpCart, uow)),
+		ChangeQuantity: changeitemquantity.NewHandler(changeitemquantity.NewUsecase(uow)),
+		RemoveItem:     removeitem.NewHandler(removeitem.NewUsecase(uow)),
+		Checkout:       checkout.NewHandler(checkout.NewUsecase(uow)),
 	}
 
 	// User features — client
@@ -60,6 +79,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		api,
 		hdRegister, hdLogin,
 		hdProducts,
+		hdCart,
 		hdGetMe, hdUpdateMe,
 		hdAdminList, hdAdminGet, hdManage, hdActivity,
 	)

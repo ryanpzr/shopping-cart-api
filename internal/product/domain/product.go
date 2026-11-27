@@ -1,8 +1,9 @@
 package domain
 
 import (
-	"math"
 	"time"
+
+	"github.com/ryanpzr/shopping-cart-api/pkg/money"
 )
 
 const (
@@ -25,10 +26,20 @@ type Product struct {
 	UpdatedAt          time.Time
 }
 
-// FinalPrice is the price after the discount, rounded to cents.
+// UnitPrice is the price before the discount, as money.
+func (p Product) UnitPrice() money.Money {
+	return money.FromFloat(p.Price)
+}
+
+// SalePrice is the price after the discount, rounded half up to cents. It is
+// the single source of the price a buyer pays (cart snapshots, orders).
+func (p Product) SalePrice() money.Money {
+	return p.UnitPrice().ApplyDiscount(p.DiscountPercentage)
+}
+
+// FinalPrice is SalePrice as a decimal number, for the product API responses.
 func (p Product) FinalPrice() float64 {
-	v := p.Price * (1 - float64(p.DiscountPercentage)/100)
-	return math.Round(v*100) / 100
+	return p.SalePrice().Float64()
 }
 
 func (p Product) IsActive() bool {

@@ -18,6 +18,8 @@ tags:
     description: Admin-only — user administration
   - name: Products
     description: Product catalog management
+  - name: Cart
+    description: Authenticated user's active cart and checkout
 
 components:
   securitySchemes:
@@ -368,6 +370,124 @@ components:
         message:
           type: string
           example: product deleted successfully
+
+    # ─── Cart ───────────────────────────────────────────────────────────────
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 10
+        product_id:
+          type: integer
+          example: 5
+        title:
+          type: string
+          example: Mechanical Keyboard
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+        price_snapshot:
+          type: number
+          description: Sale price (after the discount) when the item was added or last refreshed
+          example: 169.92
+
+    Cart:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [active, checked_out]
+          example: active
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        subtotal:
+          type: number
+          description: Sum of price_snapshot * quantity, exact to the cent
+          example: 384.84
+        discount_total:
+          type: number
+          description: Always 0 — discounts are already part of each price_snapshot
+          example: 0.00
+        total:
+          type: number
+          example: 384.84
+
+    AddCartItemRequest:
+      type: object
+      required: [product_id, quantity]
+      properties:
+        product_id:
+          type: integer
+          example: 5
+        quantity:
+          type: integer
+          minimum: 1
+          example: 2
+
+    ChangeCartItemQuantityRequest:
+      type: object
+      required: [quantity]
+      properties:
+        quantity:
+          type: integer
+          minimum: 1
+          description: Use DELETE to remove the item
+          example: 3
+
+    OrderItem:
+      type: object
+      properties:
+        product_id:
+          type: integer
+          example: 5
+        quantity:
+          type: integer
+          example: 2
+        unit_price:
+          type: number
+          description: Price before the discount, at checkout
+          example: 199.90
+        discount_percentage:
+          type: integer
+          description: Discount at checkout
+          example: 15
+        sale_price:
+          type: number
+          example: 169.92
+        subtotal:
+          type: number
+          example: 339.84
+
+    OrderSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 55
+        cart_id:
+          type: integer
+          example: 1
+        status:
+          type: string
+          enum: [pending, paid, shipped, delivered, cancelled]
+          example: pending
+        total_price:
+          type: number
+          example: 384.84
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        created_at:
+          type: string
+          format: date-time
 
     # ─── Errors ─────────────────────────────────────────────────────────────
     ErrorResponse:
@@ -1067,7 +1187,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Product has active orders (pending/paid/shipped)
+          description: Product is in an active order (pending/paid/shipped) or still referenced by a past order
           content:
             application/json:
               schema:
@@ -1129,3 +1249,206 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  # Cart ─────────────────────────────────────────────────────────────────────
+  /carts/me:
+    get:
+      tags: [Cart]
+      summary: Get the active cart (created on first use)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: The authenticated user's active cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /carts/me/items:
+    post:
+      tags: [Cart]
+      summary: Add a product to the cart
+      description: >-
+        Adding a product already in the cart sums the quantities, re-validates the combined quantity
+        against the stock and refreshes the price snapshot to the current sale price.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddCartItemRequest'
+      responses:
+        '200':
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: Missing or invalid product_id / quantity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The product belongs to the buyer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Product not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Not enough stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /carts/me/items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: integer
+        example: 10
+    patch:
+      tags: [Cart]
+      summary: Change an item's quantity
+      description: Keeps the price snapshot. Use DELETE to remove the item.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeCartItemQuantityRequest'
+      responses:
+        '200':
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: Invalid item id or quantity (must be greater than 0)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Item not in the user's active cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Not enough stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Cart]
+      summary: Remove an item from the cart
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          description: Invalid item id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Item not in the user's active cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /carts/me/checkout:
+    post:
+      tags: [Cart]
+      summary: Check out the active cart
+      description: >-
+        Runs in one transaction: locks the cart and its products, re-validates every item, decrements
+        the stock, creates a pending order and closes the cart. Concurrent checkouts cannot oversell.
+        If a price changed since an item was added, the cart snapshots are refreshed, no order is placed
+        and the response is 409; checking out again uses the new prices.
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Order placed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderSummary'
+        '401':
+          description: Token missing or invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: The cart contains the buyer's own product
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Empty cart, product no longer available, not enough stock, or prices changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                empty:
+                  value:
+                    error: cart is empty
+                stock:
+                  value:
+                    error: 'not enough stock for "Lamp": requested 2, available 1'
+                prices_changed:
+                  value:
+                    error: prices changed since the items were added; the cart was updated, review it and check out again

@@ -28,15 +28,15 @@
 | order_id | INTEGER FK | REFERENCES orders(id) NOT NULL |
 | product_id | INTEGER FK | REFERENCES products(id) NOT NULL |
 | quantity | INTEGER | NOT NULL, > 0 |
-| unit_price_snapshot | NUMERIC(10,2) | NOT NULL — price at checkout time |
-| discount_snapshot | INTEGER | NOT NULL, 0–100 — discount at checkout time |
+| unit_price_snapshot | NUMERIC(10,2) | NOT NULL — price before the discount, at checkout time |
+| discount_snapshot | INTEGER | NOT NULL, 0–100 — discount percentage at checkout time |
 
 ## DB Schema
 
 ```sql
 CREATE TABLE orders (
     id          SERIAL PRIMARY KEY,
-    cart_id     INTEGER       NOT NULL REFERENCES carts(id),
+    cart_id     INTEGER       NOT NULL UNIQUE REFERENCES carts(id),  -- one order per cart
     buyer_id    INTEGER       NOT NULL REFERENCES users(id),
     total_price NUMERIC(10,2) NOT NULL,
     status      VARCHAR(15)   NOT NULL DEFAULT 'pending'
@@ -102,31 +102,37 @@ pending → paid → shipped → delivered
 
 Orders are not created via a direct POST /orders endpoint. They are created by the checkout flow in `BR-CART-005`. The Order module only exposes read and status-update operations.
 
+Since Phase 2 the tables exist (`004_create_orders.sql`) and checkout writes them through
+`internal/order/shared.Repository.Create`, in the checkout transaction. `unit_price_snapshot` is the
+product price **before** the discount and `discount_snapshot` the discount percentage, both taken at
+checkout; the line price is `unit_price_snapshot` with the discount applied (rounded half up to cents),
+and `total_price` is the sum of the lines. Amounts use `pkg/money` (integer cents).
+
 ## Cross-Module Notes
 
 **Product delete guard (BR-PROD-006).** The delete usecase asks an `OrderChecker` whether the product
 is in orders with `domain.ActiveOrderStatuses` (`pending`, `paid`, `shipped`).
-`shared.OrderRepository.HasOrdersWithStatus` (`internal/product/shared/orders.go`) joins `order_items`
-(by `product_id`) with `orders` and filters `orders.status = ANY($2)`. Until this module exists,
-`setup.go` injects the `shared.NoOrders` stub, which always answers `false`.
-When this module's migration lands, swap `productshared.NoOrders{}` for
-`productshared.NewOrderRepository(conn)` in `setup.go` and delete `NoOrders`.
-Keep the table and column names above (`order_items.product_id`, `order_items.order_id`, `orders.status`).
+`HasOrdersWithStatus` in the order repository (`internal/order/shared`) joins `order_items`
+(by `product_id`) with `orders` and filters `orders.status = ANY($2)`. It is wired in `setup.go` since
+Phase 2, when checkout started creating orders. Keep the table and column names above
+(`order_items.product_id`, `order_items.order_id`, `orders.status`).
 
 **Open question — delete is check-then-act.** The usecase checks for active orders and then deletes,
-in two statements. Once checkout can create orders concurrently, run both inside one transaction
+in two statements, while checkout can now create orders concurrently. Run both inside one transaction
 (the product repository already accepts a `*sql.Tx` through `DBTX`) and lock the product row.
 
 **Open question — deleting products with past orders.** `order_items.product_id` references
 `products(id)` with the default `NO ACTION`, so a hard delete of a product that appears in a
-`delivered` or `cancelled` order will fail on the foreign key. Decide in this module whether to
-keep product rows (soft delete), use `ON DELETE SET NULL` on a nullable `product_id`, or block
-the delete with `ErrConflict`.
+`delivered` or `cancelled` order fails on the foreign key. Since Phase 2 the product repository maps
+that violation to `ErrProductInUse` and the delete answers `409` instead of `500`; this also covers an
+order placed between the active-order check and the delete. Decide in this module whether that stays
+the policy or becomes a soft delete / `ON DELETE SET NULL` on a nullable `product_id`.
 
 ## Implementation Checklist
 
-- [ ] Migration SQL — create `orders` and `order_items` tables + indexes
-- [ ] `internal/order/domain/order.go` — Order and OrderItem structs
+- [x] Migration SQL — create `orders` and `order_items` tables + indexes (Phase 2, `004_create_orders.sql`)
+- [x] `internal/order/domain/order.go` — Order and OrderItem structs (Phase 2)
+- [x] `internal/order/shared/repository.go` — `Create` (Phase 2, used by checkout)
 - [ ] `internal/order/shared/repository.go` — `FindByBuyer`, `FindById`, `UpdateStatus`, `Cancel` (with stock restore)
 - [ ] `internal/order/features/list_orders/` — handler, usecase, ports, dtos
 - [ ] `internal/order/features/get_order/` — handler, usecase, ports, dtos

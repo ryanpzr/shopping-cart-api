@@ -7,16 +7,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lib/pq"
+
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
+	"github.com/ryanpzr/shopping-cart-api/pkg/database"
 )
 
 // DBTX is satisfied by both *sql.DB and *sql.Tx, so the repository can run
 // inside a transaction owned by the caller (e.g. checkout, outbox events).
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type DBTX = database.DBTX
 
 // ProductFilters narrows FindAll. Nil fields are not applied; the repository
 // adds no implicit condition, so visibility rules belong to the caller.
@@ -38,6 +37,10 @@ type Repository interface {
 	Update(ctx context.Context, p domain.Product) (domain.Product, error)
 	UpdateStatus(ctx context.Context, id int, status string) error
 	Delete(ctx context.Context, id int) error
+	// LockByIDs loads the products with SELECT … FOR UPDATE. It must run
+	// inside a transaction; missing ids are simply absent from the result.
+	LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error)
+	UpdateStock(ctx context.Context, id, quantity int) error
 }
 
 type repository struct {
@@ -61,6 +64,9 @@ func scanProduct(s scanner) (domain.Product, error) {
 	)
 	return p, err
 }
+
+// PostgreSQL error code for foreign_key_violation.
+const pgForeignKeyViolation = "23503"
 
 func wrap(op string, err error) error {
 	return fmt.Errorf("product repository: %s: %w", op, err)
@@ -177,10 +183,43 @@ func (r *repository) UpdateStatus(ctx context.Context, id int, status string) er
 
 func (r *repository) Delete(ctx context.Context, id int) error {
 	result, err := r.db.ExecContext(ctx, queryDelete, id)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == pgForeignKeyViolation {
+		return domain.ErrProductInUse
+	}
 	if err != nil {
 		return wrap("delete", err)
 	}
 	return requireAffected(result, "delete")
+}
+
+func (r *repository) LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error) {
+	rows, err := r.db.QueryContext(ctx, queryLockByIDs, pq.Array(ids))
+	if err != nil {
+		return nil, wrap("lock by ids", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	products := make([]domain.Product, 0, len(ids))
+	for rows.Next() {
+		p, err := scanProduct(rows)
+		if err != nil {
+			return nil, wrap("scan", err)
+		}
+		products = append(products, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrap("iterate", err)
+	}
+	return products, nil
+}
+
+func (r *repository) UpdateStock(ctx context.Context, id, quantity int) error {
+	result, err := r.db.ExecContext(ctx, queryUpdateStock, quantity, id)
+	if err != nil {
+		return wrap("update stock", err)
+	}
+	return requireAffected(result, "update stock")
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)

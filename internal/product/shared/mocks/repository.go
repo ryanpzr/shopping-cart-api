@@ -33,8 +33,12 @@ func (m *Repository) Create(ctx context.Context, p domain.Product) (domain.Produ
 	return created, args.Error(1)
 }
 
+// Update accepts a fixed product or a func(ctx, product) Product as return value.
 func (m *Repository) Update(ctx context.Context, p domain.Product) (domain.Product, error) {
 	args := m.Called(ctx, p)
+	if fn, ok := args.Get(0).(func(context.Context, domain.Product) domain.Product); ok {
+		return fn(ctx, p), args.Error(1)
+	}
 	updated, _ := args.Get(0).(domain.Product)
 	return updated, args.Error(1)
 }
@@ -45,6 +49,16 @@ func (m *Repository) UpdateStatus(ctx context.Context, id int, status string) er
 
 func (m *Repository) Delete(ctx context.Context, id int) error {
 	return m.Called(ctx, id).Error(0)
+}
+
+func (m *Repository) LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error) {
+	args := m.Called(ctx, ids)
+	products, _ := args.Get(0).([]domain.Product)
+	return products, args.Error(1)
+}
+
+func (m *Repository) UpdateStock(ctx context.Context, id, quantity int) error {
+	return m.Called(ctx, id, quantity).Error(0)
 }
 
 type OrderChecker struct{ mock.Mock }

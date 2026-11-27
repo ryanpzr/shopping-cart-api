@@ -13,7 +13,7 @@ type Usecase interface {
 type Repository = shared.Repository
 
 // OrderChecker tells whether a product appears in orders with given statuses.
-// Implemented by shared.OrderRepository; shared.NoOrders until Phase 3.
+// Implemented by the order repository (internal/order/shared).
 type OrderChecker interface {
 	HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error)
 }

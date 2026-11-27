@@ -178,7 +178,22 @@ type AppError struct {
 | usecase | Apply business rules; pass rule values to the repository (e.g. `Status: active`, `domain.ActiveOrderStatuses`); load → change → validate → save; map errors with `errors.Is`/`errors.As` to `apperrors` | Build SQL |
 | handler | Bind and parse input; call the usecase; `apperrors.HandleError` | Business rules |
 
-Dependencies that do not exist yet (e.g. orders before module 05) are injected as explicit stubs in `setup.go` (`shared.NoOrders`), not detected at runtime by the repository.
+Dependencies that do not exist yet are injected as explicit stubs in `setup.go` (e.g. `NoOrders`, used until the order tables arrived), not detected at runtime by the repository.
+
+### Transactions
+
+- Repositories accept a `pkg/database.DBTX` (`*sql.DB` or `*sql.Tx`), so the caller decides the transaction.
+- A usecase that needs several writes to be all-or-nothing depends on a **unit of work** port
+  (e.g. `internal/cart/shared.UnitOfWork`): `Do(ctx, func(repos) error)` runs the function with repositories bound
+  to one transaction (`database.WithinTx`), committing when it returns `nil` and rolling back otherwise.
+- Row locks (`SELECT … FOR UPDATE`) are repository methods named `Lock…`. Lock several rows in a fixed order
+  (by id) to avoid deadlocks.
+- Tests use a fake unit of work that runs the function with mocks and records whether it would commit.
+
+### Money
+
+Amounts that are summed or multiplied use `pkg/money.Money` (integer cents, exact). It scans `NUMERIC`
+without `float64` and marshals to JSON as a decimal number.
 
 > The `product` module follows this pattern. The `user` module still returns `apperrors` from its repository and will be migrated separately.
 
