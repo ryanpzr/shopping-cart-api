@@ -48,8 +48,14 @@ func (u *usecase) Delete(ctx context.Context, productID, userID int, role string
 }
 
 func toAppError(err error) error {
-	if errors.Is(err, domain.ErrProductNotFound) {
+	switch {
+	case errors.Is(err, domain.ErrProductNotFound):
 		return apperrors.NewNotFound("product not found")
+	case errors.Is(err, domain.ErrProductInUse):
+		// Orders that are no longer active (delivered, cancelled) still keep the
+		// product; deleting it is decided in Phase 3 (see 05-order.md).
+		return apperrors.NewConflict("product has orders and cannot be deleted")
+	default:
+		return apperrors.NewInternalServer(err.Error())
 	}
-	return apperrors.NewInternalServer(err.Error())
 }

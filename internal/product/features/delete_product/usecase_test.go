@@ -92,6 +92,19 @@ func TestDelete_DeletedConcurrently(t *testing.T) {
 	assertAppError(t, err, http.StatusNotFound)
 }
 
+func TestDelete_ProductStillReferencedByOrders(t *testing.T) {
+	// No active order, but a delivered/cancelled one still references the
+	// product, or an order was placed between the check and the delete.
+	repo, orders := new(mocks.Repository), new(mocks.OrderChecker)
+	repo.On("FindByID", mock.Anything, 3).Return(product, nil)
+	orders.On("HasOrdersWithStatus", mock.Anything, 3, mock.Anything).Return(false, nil)
+	repo.On("Delete", mock.Anything, 3).Return(domain.ErrProductInUse)
+
+	err := deleteproduct.NewUsecase(repo, orders).Delete(context.Background(), 3, 7, "client")
+
+	assertAppError(t, err, http.StatusConflict)
+}
+
 func TestDelete_OrderCheckFails(t *testing.T) {
 	repo, orders := new(mocks.Repository), new(mocks.OrderChecker)
 	repo.On("FindByID", mock.Anything, 3).Return(product, nil)

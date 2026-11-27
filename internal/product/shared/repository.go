@@ -65,6 +65,9 @@ func scanProduct(s scanner) (domain.Product, error) {
 	return p, err
 }
 
+// PostgreSQL error code for foreign_key_violation.
+const pgForeignKeyViolation = "23503"
+
 func wrap(op string, err error) error {
 	return fmt.Errorf("product repository: %s: %w", op, err)
 }
@@ -180,6 +183,10 @@ func (r *repository) UpdateStatus(ctx context.Context, id int, status string) er
 
 func (r *repository) Delete(ctx context.Context, id int) error {
 	result, err := r.db.ExecContext(ctx, queryDelete, id)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == pgForeignKeyViolation {
+		return domain.ErrProductInUse
+	}
 	if err != nil {
 		return wrap("delete", err)
 	}
