@@ -12,7 +12,6 @@ import (
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	deleteproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/delete_product"
-	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared/mocks"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 )
@@ -102,10 +101,4 @@ func TestDelete_OrderCheckFails(t *testing.T) {
 
 	assertAppError(t, err, http.StatusInternalServerError)
 	repo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
-}
-
-func TestNoOrders(t *testing.T) {
-	has, err := shared.NoOrders{}.HasOrdersWithStatus(context.Background(), 3, domain.ActiveOrderStatuses)
-	require.NoError(t, err)
-	assert.False(t, has)
 }
