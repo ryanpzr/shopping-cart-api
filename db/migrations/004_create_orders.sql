@@ -6,7 +6,8 @@
 
 CREATE TABLE IF NOT EXISTS orders (
     id          SERIAL PRIMARY KEY,
-    cart_id     INTEGER       NOT NULL REFERENCES carts(id),
+    -- A cart produces at most one order (checkout also locks the cart).
+    cart_id     INTEGER       NOT NULL UNIQUE REFERENCES carts(id),
     buyer_id    INTEGER       NOT NULL REFERENCES users(id),
     total_price NUMERIC(10,2) NOT NULL,
     status      VARCHAR(15)   NOT NULL DEFAULT 'pending'

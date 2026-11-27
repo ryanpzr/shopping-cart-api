@@ -146,6 +146,17 @@ func TestCheckout_PriceChangedRefreshesSnapshotsAndPlacesNoOrder(t *testing.T) {
 	uow.Carts.AssertNotCalled(t, "UpdateStatus", mock.Anything, mock.Anything, mock.Anything)
 }
 
+func TestCheckout_CartAlreadyOrdered(t *testing.T) {
+	uow := setup(cart(), products())
+	uow.Products.On("UpdateStock", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	uow.Orders.On("Create", mock.Anything, mock.Anything).Return(nil, orderdomain.ErrCartAlreadyOrdered)
+
+	_, err := checkout.NewUsecase(uow).Checkout(context.Background(), buyer)
+
+	assertAppError(t, err, http.StatusConflict)
+	assert.False(t, uow.Committed)
+}
+
 func TestCheckout_RepositoryFailureRollsBack(t *testing.T) {
 	uow := setup(cart(), products())
 	uow.Products.On("UpdateStock", mock.Anything, mock.Anything, mock.Anything).Return(nil)

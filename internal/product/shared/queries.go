@@ -53,14 +53,4 @@ const (
 		SET quantity = $1, updated_at = NOW()
 		WHERE id = $2
 	`
-
-	queryHasOrdersWithStatus = `
-		SELECT EXISTS (
-			SELECT 1
-			FROM order_items oi
-			JOIN orders o ON o.id = oi.order_id
-			WHERE oi.product_id = $1
-			  AND o.status = ANY($2)
-		)
-	`
 )

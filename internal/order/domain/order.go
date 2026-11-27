@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/ryanpzr/shopping-cart-api/pkg/money"
@@ -13,6 +14,9 @@ const (
 	StatusDelivered = "delivered"
 	StatusCancelled = "cancelled"
 )
+
+// ErrCartAlreadyOrdered: a cart produces at most one order.
+var ErrCartAlreadyOrdered = errors.New("cart already has an order")
 
 type Order struct {
 	ID         int

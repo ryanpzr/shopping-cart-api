@@ -118,6 +118,8 @@ func toAppError(err error) error {
 		return appErr
 	case errors.As(err, &stock):
 		return apperrors.NewConflict(stock.Error())
+	case errors.Is(err, orderdomain.ErrCartAlreadyOrdered):
+		return apperrors.NewConflict("cart was already checked out")
 	default:
 		return apperrors.NewInternalServer(err.Error())
 	}

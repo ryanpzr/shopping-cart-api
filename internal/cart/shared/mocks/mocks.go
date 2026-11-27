@@ -68,6 +68,11 @@ func (m *OrderRepository) Create(ctx context.Context, order orderdomain.Order) (
 	return created, args.Error(1)
 }
 
+func (m *OrderRepository) HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error) {
+	args := m.Called(ctx, productID, statuses)
+	return args.Bool(0), args.Error(1)
+}
+
 // UnitOfWork runs fn with the given mocks and records whether it would have
 // committed: a real unit of work commits when fn returns nil.
 type UnitOfWork struct {

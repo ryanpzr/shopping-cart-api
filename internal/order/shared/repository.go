@@ -2,7 +2,10 @@ package shared
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/lib/pq"
 
 	"github.com/ryanpzr/shopping-cart-api/internal/order/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/database"
@@ -20,6 +23,21 @@ const (
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id
 	`
+
+	queryHasOrdersWithStatus = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM order_items oi
+			JOIN orders o ON o.id = oi.order_id
+			WHERE oi.product_id = $1
+			  AND o.status = ANY($2)
+		)
+	`
+
+	// Name of the unique constraint that allows one order per cart.
+	constraintOneOrderPerCart = "orders_cart_id_key"
+
+	pgUniqueViolation = "23505"
 )
 
 // Repository only talks to the database; see the layer rules in
@@ -27,8 +45,12 @@ const (
 // with the order endpoints (Phase 3).
 type Repository interface {
 	// Create inserts the order and its items. Run it inside the caller's
-	// transaction so the order is all-or-nothing.
+	// transaction so the order is all-or-nothing. It returns
+	// domain.ErrCartAlreadyOrdered when the cart already has an order.
 	Create(ctx context.Context, order domain.Order) (domain.Order, error)
+	// HasOrdersWithStatus reports whether the product is in an order whose
+	// status is one of statuses. Which statuses matter is decided by the caller.
+	HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error)
 }
 
 type repository struct {
@@ -47,6 +69,10 @@ func (r *repository) Create(ctx context.Context, order domain.Order) (domain.Ord
 	err := r.db.QueryRowContext(ctx, queryCreateOrder,
 		order.CartID, order.BuyerID, order.TotalPrice, order.Status,
 	).Scan(&order.ID, &order.CreatedAt, &order.UpdatedAt)
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == pgUniqueViolation && pqErr.Constraint == constraintOneOrderPerCart {
+		return domain.Order{}, domain.ErrCartAlreadyOrdered
+	}
 	if err != nil {
 		return domain.Order{}, wrap("create order", err)
 	}
@@ -65,4 +91,13 @@ func (r *repository) Create(ctx context.Context, order domain.Order) (domain.Ord
 	order.Items = items
 
 	return order, nil
+}
+
+func (r *repository) HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, queryHasOrdersWithStatus, productID, pq.Array(statuses)).Scan(&exists)
+	if err != nil {
+		return false, wrap("has orders with status", err)
+	}
+	return exists, nil
 }

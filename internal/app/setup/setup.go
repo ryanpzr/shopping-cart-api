@@ -14,6 +14,7 @@ import (
 	getcart "github.com/ryanpzr/shopping-cart-api/internal/cart/features/get_cart"
 	removeitem "github.com/ryanpzr/shopping-cart-api/internal/cart/features/remove_item"
 	cartshared "github.com/ryanpzr/shopping-cart-api/internal/cart/shared"
+	ordershared "github.com/ryanpzr/shopping-cart-api/internal/order/shared"
 	"github.com/ryanpzr/shopping-cart-api/internal/product"
 	createproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/create_product"
 	deleteproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/delete_product"
@@ -49,7 +50,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
 		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
-		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, productshared.NewOrderRepository(conn))),
+		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, ordershared.NewRepository(conn))),
 	}
 
 	// Cart features: mutations and checkout run through a unit of work, so
