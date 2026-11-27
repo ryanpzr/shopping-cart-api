@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/ryanpzr/shopping-cart-api/pkg/money"
@@ -35,6 +36,7 @@ type Item struct {
 	ID                 int
 	OrderID            int
 	ProductID          int
+	Title              string // product title, for display only
 	Quantity           int
 	UnitPrice          money.Money // unit_price_snapshot
 	DiscountPercentage int         // discount_snapshot
@@ -49,6 +51,20 @@ func (i Item) SalePrice() money.Money {
 func (i Item) Subtotal() money.Money {
 	return i.SalePrice().Mul(i.Quantity)
 }
+
+// ProductIDs lists the products in the order, sorted, so stock rows are always
+// locked in the same order (no deadlocks between concurrent operations).
+func (o Order) ProductIDs() []int {
+	ids := make([]int, 0, len(o.Items))
+	for _, item := range o.Items {
+		ids = append(ids, item.ProductID)
+	}
+	sort.Ints(ids)
+	return ids
+}
+
+// OwnedBy reports whether the order belongs to the buyer.
+func (o Order) OwnedBy(buyerID int) bool { return o.BuyerID == buyerID }
 
 // NewPending builds a pending order whose total is the sum of the item subtotals.
 func NewPending(cartID, buyerID int, items []Item) Order {
