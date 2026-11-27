@@ -55,7 +55,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
 		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
-		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, ordershared.NewRepository(conn))),
+		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(deleteproduct.NewUnitOfWork(conn))),
 	}
 
 	// Cart features: mutations and checkout run through a unit of work, so
