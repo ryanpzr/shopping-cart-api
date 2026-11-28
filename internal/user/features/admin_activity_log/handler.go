@@ -22,7 +22,7 @@ func NewHandler(usecase Usecase) Handler {
 
 func (h *handler) GetActivityLog(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
+	if err != nil || id < 1 {
 		apperrors.HandleError(c, apperrors.NewBadRequest("invalid user id"))
 		return
 	}
@@ -39,6 +39,10 @@ func (h *handler) GetActivityLog(c *gin.Context) {
 		limit = 100
 	}
 
-	resp, _ := h.usecase.GetActivityLog(id, page, limit)
+	resp, err := h.usecase.GetActivityLog(c.Request.Context(), id, page, limit, c.Query("event_type"))
+	if err != nil {
+		apperrors.HandleError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, resp)
 }

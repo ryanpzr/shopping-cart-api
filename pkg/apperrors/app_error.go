@@ -14,3 +14,7 @@ func NewNotFound(msg string) *AppError        { return &AppError{404, msg} }
 func NewConflict(msg string) *AppError        { return &AppError{409, msg} }
 func NewTooManyRequests(msg string) *AppError { return &AppError{429, msg} }
 func NewInternalServer(msg string) *AppError  { return &AppError{500, msg} }
+
+// NewServiceUnavailable is a 503: a dependency is down. The message is shown to
+// the client, so it must be a fixed text with no internal details.
+func NewServiceUnavailable(msg string) *AppError { return &AppError{503, msg} }
