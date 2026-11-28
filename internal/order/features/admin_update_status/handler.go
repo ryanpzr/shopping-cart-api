@@ -33,7 +33,7 @@ func (h *handler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.usecase.UpdateStatus(c.Request.Context(), id, req)
+	resp, err := h.usecase.UpdateStatus(c.Request.Context(), id, c.GetInt("user_id"), req)
 	if err != nil {
 		apperrors.HandleError(c, err)
 		return

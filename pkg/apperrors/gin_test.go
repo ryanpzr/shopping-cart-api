@@ -44,3 +44,15 @@ func TestHandleError_WrappedAppError(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w.Code)
 	assert.JSONEq(t, `{"error":"email already registered"}`, w.Body.String())
 }
+
+func TestHandleError_ServiceUnavailableShowsItsFixedMessage(t *testing.T) {
+	w := serve(apperrors.NewServiceUnavailable("activity log is temporarily unavailable"))
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+	assert.JSONEq(t, `{"error":"activity log is temporarily unavailable"}`, w.Body.String())
+}
+
+func TestHandleError_OtherServerErrorsStayGeneric(t *testing.T) {
+	w := serve(&apperrors.AppError{Code: http.StatusBadGateway, Message: "upstream said: password=secret"})
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.JSONEq(t, `{"error":"internal server error"}`, w.Body.String())
+}

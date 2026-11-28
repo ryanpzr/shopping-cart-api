@@ -9,14 +9,18 @@ import (
 
 	"github.com/ryanpzr/shopping-cart-api/internal/order/domain"
 	"github.com/ryanpzr/shopping-cart-api/internal/order/shared"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 // Cancel moves the order to cancelled and gives the units of every item back
 // to the stock. It must run inside a transaction, with order loaded through
 // LockByID, so its status is current and a concurrent cancellation waits.
 //
+// actorID is who cancelled the order: the buyer or an admin. The audit event
+// belongs to the actor and is committed with the cancellation, or not at all.
+//
 // It returns *domain.TransitionError when the order is not cancellable.
-func Cancel(ctx context.Context, r shared.TxRepositories, order domain.Order) error {
+func Cancel(ctx context.Context, r shared.TxRepositories, order domain.Order, actorID int) error {
 	if err := domain.CheckTransition(order.Status, domain.StatusCancelled); err != nil {
 		return err
 	}
@@ -46,5 +50,12 @@ func Cancel(ctx context.Context, r shared.TxRepositories, order domain.Order) er
 		}
 	}
 
-	return r.Orders.UpdateStatus(ctx, order.ID, domain.StatusCancelled)
+	if err := r.Orders.UpdateStatus(ctx, order.ID, domain.StatusCancelled); err != nil {
+		return err
+	}
+
+	return r.Outbox.Insert(ctx, outbox.New(actorID, outbox.EventOrderCancelled, map[string]any{
+		"order_id": order.ID,
+		"buyer_id": order.BuyerID,
+	}))
 }

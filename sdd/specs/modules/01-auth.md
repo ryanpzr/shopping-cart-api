@@ -55,6 +55,7 @@ CREATE TABLE users (
 - `401` if email not found or password doesn't match
 - `403` if `status = banned`
 - `403` if `status = timeout` AND `timeout_until > NOW()`
+- Successful login emits a `login` activity log event in a single `INSERT`; if it cannot be written the login answers `500` and hands out no token (BR-ADMIN-006)
 
 **BR-AUTH-003 — JWT Middleware** (used by all other modules)
 - Header: `Authorization: Bearer <token>`

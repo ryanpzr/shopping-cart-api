@@ -1,20 +1,52 @@
 package adminactivitylog
 
-// usecase is a stub — returns empty paginated response.
-// TODO (module 06): replace with real implementation backed by activitylog.Repository.
-// See sdd/specs/modules/06-activity-log.md for the full checklist.
-type usecase struct{}
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"strings"
 
-func NewUsecase() Usecase {
-	return &usecase{}
+	"github.com/ryanpzr/shopping-cart-api/internal/activitylog/domain"
+	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+)
+
+type usecase struct {
+	repo Repository
 }
 
-func (u *usecase) GetActivityLog(userID, page, limit int) (ActivityLogResponse, error) {
+func NewUsecase(repo Repository) Usecase {
+	return &usecase{repo: repo}
+}
+
+// GetActivityLog implements BR-ADMIN-006. It reads from MongoDB, which is fed
+// asynchronously, so a very recent action may not be listed yet.
+func (u *usecase) GetActivityLog(ctx context.Context, userID, page, limit int, eventType string) (ActivityLogResponse, error) {
+	if eventType != "" && !outbox.ValidType(eventType) {
+		return ActivityLogResponse{}, apperrors.NewBadRequest(
+			fmt.Sprintf("event_type must be one of: %s", strings.Join(outbox.EventTypes, ", ")))
+	}
+
+	entries, total, err := u.repo.FindByUser(ctx, userID, eventType, limit, (page-1)*limit)
+	if errors.Is(err, domain.ErrStoreUnavailable) {
+		// The cause stays in the log; the client only gets a fixed message.
+		log.Printf("activity log: %v", err)
+		return ActivityLogResponse{}, apperrors.NewServiceUnavailable("activity log is temporarily unavailable")
+	}
+	if err != nil {
+		return ActivityLogResponse{}, apperrors.NewInternalServer(err.Error())
+	}
+
+	data := make([]ActivityLogEntry, 0, len(entries))
+	for _, e := range entries {
+		data = append(data, toEntry(e))
+	}
 	return ActivityLogResponse{
-		Data:       []ActivityLogEntry{},
-		Total:      0,
+		Data:       data,
+		Total:      int(total),
 		Page:       page,
 		Limit:      limit,
-		TotalPages: 0,
+		TotalPages: (int(total) + limit - 1) / limit,
 	}, nil
 }

@@ -9,6 +9,7 @@ import (
 	orderdomain "github.com/ryanpzr/shopping-cart-api/internal/order/domain"
 	productdomain "github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 // errPricesChanged: some prices changed since the items were added. The
@@ -95,7 +96,18 @@ func (u *usecase) Checkout(ctx context.Context, buyerID int) (OrderResponse, err
 			return err
 		}
 
-		// TODO(module-06): emit `cart_checkout` and `order_placed` through the outbox, in this transaction.
+		// Both audit events are committed with the order, or not at all.
+		for _, event := range []outbox.Event{
+			outbox.New(buyerID, outbox.EventCartCheckout, map[string]any{
+				"order_id":    order.ID,
+				"total_price": order.TotalPrice,
+			}),
+			outbox.New(buyerID, outbox.EventOrderPlaced, map[string]any{"order_id": order.ID}),
+		} {
+			if err := r.Outbox.Insert(ctx, event); err != nil {
+				return err
+			}
+		}
 
 		return r.Carts.UpdateStatus(ctx, cart.ID, domain.StatusCheckedOut)
 	})

@@ -7,7 +7,7 @@ import (
 )
 
 type Usecase interface {
-	UpdateStatus(ctx context.Context, orderID int, req UpdateStatusRequest) (OrderResponse, error)
+	UpdateStatus(ctx context.Context, orderID, actorID int, req UpdateStatusRequest) (OrderResponse, error)
 }
 
 type (

@@ -14,6 +14,8 @@ import (
 	"github.com/ryanpzr/shopping-cart-api/internal/order/shared"
 	ordermocks "github.com/ryanpzr/shopping-cart-api/internal/order/shared/mocks"
 	productdomain "github.com/ryanpzr/shopping-cart-api/internal/product/domain"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 func pendingOrder() domain.Order {
@@ -22,9 +24,13 @@ func pendingOrder() domain.Order {
 	}}
 }
 
+// actor is the admin who cancels in these tests: the event belongs to the actor,
+// not to the buyer of the order.
+const actor = 99
+
 func run(uow *ordermocks.UnitOfWork, order domain.Order) error {
 	return uow.Do(context.Background(), func(r shared.TxRepositories) error {
-		return cancellation.Cancel(context.Background(), r, order)
+		return cancellation.Cancel(context.Background(), r, order, actor)
 	})
 }
 
@@ -36,6 +42,9 @@ func TestCancel_RestoresStockAndMarksCancelled(t *testing.T) {
 	uow.Products.On("UpdateStock", mock.Anything, 4, 1).Return(nil)
 	uow.Products.On("UpdateStock", mock.Anything, 9, 5).Return(nil)
 	uow.Orders.On("UpdateStatus", mock.Anything, 55, domain.StatusCancelled).Return(nil)
+	// The event belongs to whoever cancelled, with the buyer in the metadata.
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventOrderCancelled, actor,
+		map[string]any{"order_id": 55, "buyer_id": 7})).Return(nil)
 
 	err := run(uow, pendingOrder())
 
@@ -43,6 +52,7 @@ func TestCancel_RestoresStockAndMarksCancelled(t *testing.T) {
 	assert.True(t, uow.Committed)
 	uow.Products.AssertExpectations(t)
 	uow.Orders.AssertExpectations(t)
+	uow.Outbox.AssertExpectations(t)
 }
 
 func TestCancel_NotCancellableTouchesNothing(t *testing.T) {
@@ -99,4 +109,26 @@ func TestCancel_RepositoryFailuresRollBack(t *testing.T) {
 		require.Error(t, run(uow, pendingOrder()))
 		assert.False(t, uow.Committed)
 	})
+}
+
+func TestCancel_NotCancellableEmitsNoEvent(t *testing.T) {
+	uow := ordermocks.NewUnitOfWork()
+	order := pendingOrder()
+	order.Status = domain.StatusShipped
+
+	require.Error(t, run(uow, order))
+
+	uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
+}
+
+func TestCancel_FailingToWriteTheEventRollsTheCancellationBack(t *testing.T) {
+	uow := ordermocks.NewUnitOfWork()
+	uow.Products.On("LockByIDs", mock.Anything, mock.Anything).Return([]productdomain.Product{{ID: 4}, {ID: 9}}, nil)
+	uow.Products.On("UpdateStock", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	uow.Orders.On("UpdateStatus", mock.Anything, 55, domain.StatusCancelled).Return(nil)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(errors.New("outbox: insert event: connection reset"))
+
+	require.Error(t, run(uow, pendingOrder()))
+
+	assert.False(t, uow.Committed, "the stock and the status must not be committed without the event")
 }

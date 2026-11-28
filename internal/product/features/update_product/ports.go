@@ -10,4 +10,7 @@ type Usecase interface {
 	Update(ctx context.Context, productID, userID int, req UpdateRequest) (ProductResponse, error)
 }
 
-type Repository = shared.Repository
+type (
+	UnitOfWork     = shared.UnitOfWork
+	TxRepositories = shared.TxRepositories
+)

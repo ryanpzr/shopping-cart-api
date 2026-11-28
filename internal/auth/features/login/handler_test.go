@@ -2,6 +2,7 @@ package login_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -19,8 +20,8 @@ type mockLoginUsecase struct {
 	mock.Mock
 }
 
-func (m *mockLoginUsecase) Login(req login.LoginRequest) (login.LoginResponse, error) {
-	args := m.Called(req)
+func (m *mockLoginUsecase) Login(ctx context.Context, req login.LoginRequest) (login.LoginResponse, error) {
+	args := m.Called(ctx, req)
 	return args.Get(0).(login.LoginResponse), args.Error(1)
 }
 
@@ -62,7 +63,7 @@ func TestLoginHandler_MissingFields(t *testing.T) {
 
 func TestLoginHandler_Success(t *testing.T) {
 	uc := new(mockLoginUsecase)
-	uc.On("Login", mock.Anything).Return(login.LoginResponse{
+	uc.On("Login", mock.Anything, mock.Anything).Return(login.LoginResponse{
 		User:  login.UserResponse{ID: 1, Email: "a@b.com"},
 		Token: "jwt-token",
 	}, nil)
@@ -74,7 +75,7 @@ func TestLoginHandler_Success(t *testing.T) {
 
 func TestLoginHandler_Unauthorized(t *testing.T) {
 	uc := new(mockLoginUsecase)
-	uc.On("Login", mock.Anything).Return(login.LoginResponse{}, apperrors.NewUnauthorized("invalid credentials"))
+	uc.On("Login", mock.Anything, mock.Anything).Return(login.LoginResponse{}, apperrors.NewUnauthorized("invalid credentials"))
 	r := newLoginRouter(login.NewHandler(uc))
 
 	w := postLoginJSON(r, map[string]string{"email": "a@b.com", "password": "wrong"})
@@ -83,7 +84,7 @@ func TestLoginHandler_Unauthorized(t *testing.T) {
 
 func TestLoginHandler_Forbidden(t *testing.T) {
 	uc := new(mockLoginUsecase)
-	uc.On("Login", mock.Anything).Return(login.LoginResponse{}, apperrors.NewForbidden("user is banned"))
+	uc.On("Login", mock.Anything, mock.Anything).Return(login.LoginResponse{}, apperrors.NewForbidden("user is banned"))
 	r := newLoginRouter(login.NewHandler(uc))
 
 	w := postLoginJSON(r, map[string]string{"email": "a@b.com", "password": "password123"})

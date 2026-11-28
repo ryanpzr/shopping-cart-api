@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
+	activitylogshared "github.com/ryanpzr/shopping-cart-api/internal/activitylog/shared"
 	"github.com/ryanpzr/shopping-cart-api/internal/app/route"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/login"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/register"
@@ -35,25 +36,30 @@ import (
 	getme "github.com/ryanpzr/shopping-cart-api/internal/user/features/get_me"
 	updateme "github.com/ryanpzr/shopping-cart-api/internal/user/features/update_me"
 	usershared "github.com/ryanpzr/shopping-cart-api/internal/user/shared"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
-func Setup(api *gin.RouterGroup, conn *sql.DB) {
+// Setup wires every module. activityLog is the read side of the audit store: it
+// is backed by MongoDB when the API has one, or answers 503 when it has not.
+func Setup(api *gin.RouterGroup, conn *sql.DB, activityLog activitylogshared.Repository) {
 	// User repository (shared across auth and user features)
 	rpUser := usershared.NewRepository(conn)
 
 	// Auth features
 	usRegister := register.NewUsecase(rpUser)
-	usLogin := login.NewUsecase(rpUser)
+	usLogin := login.NewUsecase(rpUser, outbox.NewWriter(conn))
 	hdRegister := register.NewHandler(usRegister)
 	hdLogin := login.NewHandler(usLogin)
 
 	// Product features
 	rpProduct := productshared.NewRepository(conn)
+	// Create and update write the product and its audit event in one transaction.
+	productUow := productshared.NewUnitOfWork(conn)
 	hdProducts := product.ProductHandlers{
 		List:   listproducts.NewHandler(listproducts.NewUsecase(rpProduct)),
 		Get:    getproduct.NewHandler(getproduct.NewUsecase(rpProduct)),
-		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
-		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
+		Create: createproduct.NewHandler(createproduct.NewUsecase(productUow)),
+		Update: updateproduct.NewHandler(updateproduct.NewUsecase(productUow)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
 		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(deleteproduct.NewUnitOfWork(conn))),
 	}
@@ -89,7 +95,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 	hdAdminList := adminlistusers.NewHandler(adminlistusers.NewUsecase(rpUser))
 	hdAdminGet := admingetuser.NewHandler(admingetuser.NewUsecase(rpUser))
 	hdManage := adminmanageuser.NewHandler(adminmanageuser.NewUsecase(rpUser))
-	hdActivity := adminactivitylog.NewHandler(adminactivitylog.NewUsecase()) // stub until module 06
+	hdActivity := adminactivitylog.NewHandler(adminactivitylog.NewUsecase(activityLog))
 
 	route.RegisterRoutes(
 		api,

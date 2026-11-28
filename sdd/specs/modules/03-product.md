@@ -101,6 +101,7 @@ without a migration.
 - `quantity` must be >= 0 if provided → `ErrBadRequest` (400)
 - `seller_id` is ignored even if sent in body
 - Emits `product_updated` activity log event
+- Runs in one transaction with the product row locked, so the event and the change commit together
 
 **BR-PROD-005 — Toggle visibility**
 - Only owner can toggle → `ErrForbidden` (403)
@@ -132,4 +133,4 @@ without a migration.
 - [x] `internal/product/routes.go` — map all routes
 - [x] Wire in `internal/app/setup/setup.go` and `internal/app/route/routes.go`
 - [x] Manual test: create → list → filter → update → toggle → delete (check conflict guard)
-- [ ] Activity log events (`product_created`, `product_updated`, `product_deleted`) — module 06, via the outbox
+- [x] Activity log events (`product_created`, `product_updated`, `product_deleted`) — module 06, via the outbox

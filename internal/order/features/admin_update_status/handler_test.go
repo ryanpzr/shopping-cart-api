@@ -17,15 +17,18 @@ import (
 
 type mockUsecase struct{ mock.Mock }
 
-func (m *mockUsecase) UpdateStatus(ctx context.Context, id int, req adminupdatestatus.UpdateStatusRequest) (adminupdatestatus.OrderResponse, error) {
-	args := m.Called(ctx, id, req)
+func (m *mockUsecase) UpdateStatus(ctx context.Context, id, actorID int, req adminupdatestatus.UpdateStatusRequest) (adminupdatestatus.OrderResponse, error) {
+	args := m.Called(ctx, id, actorID, req)
 	return args.Get(0).(adminupdatestatus.OrderResponse), args.Error(1)
 }
 
 func patch(uc adminupdatestatus.Usecase, path, body string) *httptest.ResponseRecorder {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.PATCH("/admin/orders/:id/status", adminupdatestatus.NewHandler(uc).UpdateStatus)
+	r.PATCH("/admin/orders/:id/status", func(c *gin.Context) {
+		c.Set("user_id", admin)
+		adminupdatestatus.NewHandler(uc).UpdateStatus(c)
+	})
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -35,7 +38,7 @@ func patch(uc adminupdatestatus.Usecase, path, body string) *httptest.ResponseRe
 
 func TestUpdateStatusHandler_OK(t *testing.T) {
 	uc := new(mockUsecase)
-	uc.On("UpdateStatus", mock.Anything, orderID, mock.MatchedBy(func(r adminupdatestatus.UpdateStatusRequest) bool {
+	uc.On("UpdateStatus", mock.Anything, orderID, admin, mock.MatchedBy(func(r adminupdatestatus.UpdateStatusRequest) bool {
 		return *r.Status == "paid"
 	})).Return(adminupdatestatus.OrderResponse{ID: orderID, Status: "paid"}, nil)
 
@@ -62,9 +65,9 @@ func TestUpdateStatusHandler_BadInput(t *testing.T) {
 
 func TestUpdateStatusHandler_ErrorCodes(t *testing.T) {
 	uc := new(mockUsecase)
-	uc.On("UpdateStatus", mock.Anything, 1, mock.Anything).Return(adminupdatestatus.OrderResponse{}, apperrors.NewConflict("cannot change"))
-	uc.On("UpdateStatus", mock.Anything, 2, mock.Anything).Return(adminupdatestatus.OrderResponse{}, apperrors.NewNotFound("order not found"))
-	uc.On("UpdateStatus", mock.Anything, 3, mock.Anything).Return(adminupdatestatus.OrderResponse{}, apperrors.NewBadRequest("status is required"))
+	uc.On("UpdateStatus", mock.Anything, 1, admin, mock.Anything).Return(adminupdatestatus.OrderResponse{}, apperrors.NewConflict("cannot change"))
+	uc.On("UpdateStatus", mock.Anything, 2, admin, mock.Anything).Return(adminupdatestatus.OrderResponse{}, apperrors.NewNotFound("order not found"))
+	uc.On("UpdateStatus", mock.Anything, 3, admin, mock.Anything).Return(adminupdatestatus.OrderResponse{}, apperrors.NewBadRequest("status is required"))
 
 	assert.Equal(t, http.StatusConflict, patch(uc, "/admin/orders/1/status", `{"status":"paid"}`).Code)
 	assert.Equal(t, http.StatusNotFound, patch(uc, "/admin/orders/2/status", `{"status":"paid"}`).Code)

@@ -30,7 +30,7 @@ func (h *handler) Login(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.usecase.Login(req)
+	resp, err := h.usecase.Login(c.Request.Context(), req)
 	if err != nil {
 		apperrors.HandleError(c, err)
 		return

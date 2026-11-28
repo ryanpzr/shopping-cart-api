@@ -1,5 +1,7 @@
 package login
 
+import "context"
+
 type Usecase interface {
-	Login(req LoginRequest) (LoginResponse, error)
+	Login(ctx context.Context, req LoginRequest) (LoginResponse, error)
 }

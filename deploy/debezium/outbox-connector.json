@@ -1,0 +1,29 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "plugin.name": "pgoutput",
+
+  "database.hostname": "db",
+  "database.port": "5432",
+  "database.user": "root",
+  "database.password": "12345",
+  "database.dbname": "shopping_cart",
+
+  "topic.prefix": "shopping-cart",
+  "slot.name": "activity_log_outbox",
+  "publication.name": "activity_log_outbox",
+  "publication.autocreate.mode": "filtered",
+  "table.include.list": "public.outbox_events",
+  "tombstones.on.delete": "false",
+
+  "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+  "value.converter": "org.apache.kafka.connect.storage.StringConverter",
+
+  "transforms": "outbox",
+  "transforms.outbox.type": "io.debezium.transforms.outbox.EventRouter",
+  "transforms.outbox.table.field.event.id": "id",
+  "transforms.outbox.table.field.event.type": "event_type",
+  "transforms.outbox.table.field.event.key": "aggregate_id",
+  "transforms.outbox.table.field.event.payload": "payload",
+  "transforms.outbox.route.by.field": "aggregate_type",
+  "transforms.outbox.route.topic.replacement": "activity-log.events"
+}
