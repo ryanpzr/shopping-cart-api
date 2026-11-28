@@ -73,6 +73,7 @@ func TestLoginUsecase_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "user@example.com", resp.User.Email)
 	assert.NotEmpty(t, resp.Token)
+	events.AssertExpectations(t)
 }
 
 func TestLoginUsecase_EmailNotFound(t *testing.T) {
@@ -161,21 +162,6 @@ func TestLoginUsecase_ExpiredTimeout(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, resp.Token)
-}
-
-func TestLoginUsecase_SuccessAssertsTheEvent(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret")
-	repo, events := new(mockUserRepo), new(outboxmocks.Writer)
-	repo.On("FindByEmail", "user@example.com").Return(&domain.User{
-		ID: 1, Email: "user@example.com", PasswordHash: hashedPassword(t, "password123"), Role: "client", Status: "active",
-	}, nil)
-	events.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventLogin, 1, nil)).Return(nil)
-
-	_, err := login.NewUsecase(repo, events).Login(context.Background(),
-		login.LoginRequest{Email: "user@example.com", Password: "password123"})
-
-	require.NoError(t, err)
-	events.AssertExpectations(t)
 }
 
 func TestLoginUsecase_FailingToWriteTheEventFailsTheLogin(t *testing.T) {

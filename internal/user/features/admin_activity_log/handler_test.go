@@ -85,3 +85,10 @@ func TestActivityLogHandler_UsecaseErrorsKeepTheirStatus(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 	assert.JSONEq(t, `{"error":"activity log is temporarily unavailable"}`, w.Body.String())
 }
+
+func TestActivityLogHandler_HugePageIs400(t *testing.T) {
+	uc := new(mockUsecase)
+	w := get(uc, "/admin/users/1/activity?page=999999999999999999&limit=100")
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	uc.AssertNotCalled(t, "GetActivityLog")
+}

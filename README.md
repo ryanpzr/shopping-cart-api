@@ -100,6 +100,7 @@ docker-compose up --build
 ```
 
 > Migrations in `db/migrations/` run automatically, in file order, on the first startup of the database (via `docker-entrypoint-initdb.d`). The backend waits for the database healthcheck before starting. To re-run migrations, reset the volume with `docker-compose down -v`.
+> **Upgrading an existing database volume:** migration `005_create_outbox_events.sql` only runs on an empty volume. Without it, login, product writes, checkout and cancellation answer `500` (the audit event cannot be written). Reset with `docker-compose down -v`, or apply the file by hand: `docker exec -i database_sc psql -U root -d shopping_cart < db/migrations/005_create_outbox_events.sql`.
 
 The API will be available at `http://localhost:8080`.
 

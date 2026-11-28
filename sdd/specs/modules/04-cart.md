@@ -133,7 +133,7 @@ use a fake unit of work.
 - Create `Order` (`status = pending`, `total_price = sum of price_snapshot * quantity`) + `OrderItem` records (`unit_price_snapshot` = price before the discount, `discount_snapshot` = discount; both equal to the cart snapshot at this point)
 - Mark `cart.status = checked_out`; the next `GET /carts/me` opens a new cart
 - Returns the created order summary (`201`)
-- Emits `cart_checkout` and `order_placed` activity log events (module 06; `TODO(module-06)` in the usecase)
+- Emits `cart_checkout` and `order_placed` activity log events
 
 ## Implementation Checklist
 
@@ -147,4 +147,4 @@ use a fake unit of work.
 - [x] `internal/cart/routes.go` — map all routes; wired in `setup.go` and `routes.go`
 - [x] Product delete guard uses the order repository (`HasOrdersWithStatus`, moved to `internal/order/shared`)
 - [x] Manual test: get cart → add item → add same item again (quantity sums) → update quantity → remove item → price change → checkout; concurrent checkouts for the last units
-- [ ] Activity log events (`cart_checkout`, `order_placed`) — module 06, through the outbox
+- [x] Activity log events (`cart_checkout`, `order_placed`) — through the outbox (module 06)

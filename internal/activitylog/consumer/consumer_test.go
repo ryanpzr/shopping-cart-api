@@ -76,9 +76,10 @@ func TestHandle_StoresTheEvent(t *testing.T) {
 	assert.Empty(t, dlq.records)
 }
 
-func TestHandle_RedeliveryIsHarmless(t *testing.T) {
-	// The store ignores an event_id it already has, so handling the same
-	// message twice succeeds both times and nothing goes to the dead letters.
+func TestHandle_RedeliveryReachesTheStoreWithTheSameEventID(t *testing.T) {
+	// The unique event_id index (repository.Upsert, covered by the smoke test) absorbs
+	// repeats; here we only check that a redelivery is not dead-lettered and carries the same
+	// event_id to the store.
 	store, dlq := &fakeStore{}, &fakeDLQ{}
 	h := newHandler(store, dlq)
 

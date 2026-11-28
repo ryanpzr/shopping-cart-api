@@ -101,7 +101,7 @@ Every response of an order has `id`, `cart_id`, `status`, `total_price`, `create
 - For each order item: restore `product.quantity += item.quantity`
 - Sets `status = cancelled`, `updated_at = NOW()`
 - One transaction: the order row is locked (`SELECT … FOR UPDATE`), then the products (by id, like checkout), so two cancellations of the same order never give the stock back twice
-- Emits `order_cancelled` activity log event (module 06; `TODO(module-06)` in the usecase)
+- Emits `order_cancelled` activity log event
 
 **BR-ADMIN-ORDER-001 — Update order status**
 - Required body: `status`, one of `pending`, `paid`, `shipped`, `delivered`, `cancelled` (exact, lower case) → `ErrBadRequest` (400) when missing or unknown
@@ -160,4 +160,4 @@ need a schema change and filters in every product query, for no current need.
 - [x] `internal/order/routes.go` — map all routes; wired in `setup.go` and `routes.go`
 - [x] Product delete in one transaction with the product row locked
 - [x] Manual test: checkout → list orders → get order → cancel (check stock restored) → admin advance status; concurrent cancellations, status changes and checkout × delete
-- [ ] Activity log event `order_cancelled` — module 06, through the outbox
+- [x] Activity log event `order_cancelled` — through the outbox (module 06)
