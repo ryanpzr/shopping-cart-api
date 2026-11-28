@@ -61,13 +61,14 @@
 - Sets `status = active`, `timeout_until = NULL`, `updated_at = NOW()`
 
 **BR-ADMIN-006 — Activity history**
-- Returns paginated activity log for the given user
-- Implemented here but reads from the MongoDB `activity_logs` collection fed asynchronously by `06-activity-log` (outbox + CDC + Kafka) — eventually consistent
+- Returns paginated activity log for the given user, newest first (`page`, default 1; `limit`, default 20, max 100)
+- Optional filter `event_type`; an unknown value → `ErrBadRequest` (400)
+- Implemented here (`internal/user/features/admin_activity_log/`) but reads from the MongoDB `activity_logs` collection fed asynchronously by `06-activity-log` (outbox + CDC + Kafka) — eventually consistent
 - Event types: `login`, `product_created`, `product_updated`, `product_deleted`, `order_placed`, `order_cancelled`, `cart_checkout`
-
-> ⚠️ STUB — implementado em `internal/user/features/admin_activity_log/` retornando lista vazia paginada.
-> A implementação real deve ser feita no módulo 06: substituir o usecase stub pelo real
-> que injeta `activitylog.Repository`. Ver checklist em `06-activity-log.md`.
+- The history of a user lists the actions **that user performed**: an admin who cancels someone else's order or deletes someone else's product gets the event in the admin's own history
+- A user with no history, or an unknown user id, returns an empty page (the endpoint reads only MongoDB)
+- MongoDB down, or not configured → `503` with a fixed message; the rest of the API is unaffected
+- Response entry: `id` (the event id), `user_id`, `event_type`, `metadata`, `occurred_at`
 
 ## Implementation Checklist
 

@@ -76,8 +76,11 @@ Marketplace-style shopping cart API. Reference this document before implementing
 - Sets `status = active`, clears `timeout_until`
 
 **BR-ADMIN-006 — Activity history**
-- Returns paginated log of user events
+- Returns paginated log of the events the user performed, newest first; optional filter `event_type` (unknown → `ErrBadRequest`)
 - Event types: `login`, `product_created`, `product_updated`, `product_deleted`, `order_placed`, `order_cancelled`, `cart_checkout`
+- Written asynchronously (outbox → Debezium → Kafka → MongoDB), so very recent actions may not be listed yet
+- Every audited action writes its event in the same transaction as the action: if the event cannot be written, the action fails (`500`) and nothing is committed
+- MongoDB unavailable → `503` (the rest of the API keeps working)
 
 ---
 

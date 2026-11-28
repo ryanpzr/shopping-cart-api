@@ -9,6 +9,7 @@ REST API for a shopping cart system built with Go and Gin. Handles authenticatio
 - **Language:** Go 1.24
 - **Framework:** Gin
 - **Database:** PostgreSQL 16
+- **Audit trail:** transactional outbox + Debezium (CDC) + Kafka + MongoDB (optional profile)
 - **Auth:** JWT (HS256, 24h expiry)
 - **Password hashing:** bcrypt
 - **Container:** Docker + Docker Compose
@@ -16,7 +17,9 @@ REST API for a shopping cart system built with Go and Gin. Handles authenticatio
 ## Project Structure
 
 ```
-cmd/             # Entry point
+cmd/
+  main.go        # The API
+  activity-consumer/  # Kafka -> MongoDB consumer (activity-log profile)
 config/          # Database connection setup
 internal/
   app/           # Wiring (setup + route aggregation)
@@ -30,7 +33,7 @@ internal/
       admin_get_user/      # GET /admin/users/:id
       admin_list_users/    # GET /admin/users
       admin_manage_user/   # PATCH /admin/users/:id/ban|timeout|unban
-      admin_activity_log/  # GET /admin/users/:id/activity (stub)
+      admin_activity_log/  # GET /admin/users/:id/activity (reads MongoDB)
     routes.go    # Client and admin route mapping
   product/       # Product module (catalog, stock, delete guard)
   cart/
@@ -51,14 +54,20 @@ internal/
       get_order/            # GET /orders/:id
       cancel_order/         # PATCH /orders/:id/cancel
       admin_update_status/  # PATCH /admin/orders/:id/status
+  activitylog/
+    domain/        # Audit entry
+    shared/        # MongoDB audit store (idempotent upsert, paged reads, indexes)
+    consumer/      # Kafka consumer logic: commit after store, retry with backoff, DLQ
 pkg/
   apperrors/     # Typed error handling
   database/      # DBTX and WithinTx (transaction helper)
   jwt/           # JWT generate/parse
   middleware/    # Auth and role middleware
+  outbox/        # Transactional outbox writer for audit events (+ purge of old rows)
   money/         # Money as integer cents (exact sums, NUMERIC and JSON support)
 sdd/specs/       # Business rules and module specifications
 db/migrations/   # SQL migration files
+deploy/debezium/ # Debezium connector config for the outbox table
 ```
 
 ## Getting Started
@@ -93,6 +102,22 @@ docker-compose up --build
 > Migrations in `db/migrations/` run automatically, in file order, on the first startup of the database (via `docker-entrypoint-initdb.d`). The backend waits for the database healthcheck before starting. To re-run migrations, reset the volume with `docker-compose down -v`.
 
 The API will be available at `http://localhost:8080`.
+
+### Activity log pipeline
+
+The audit trail uses a transactional outbox: every audited action writes its event to `outbox_events` **in the same transaction** as the business change, so the event exists if and only if the action was committed. Nothing on the request path talks to Kafka.
+
+```
+API (Postgres tx: change + outbox row) ──WAL──▶ Debezium ──▶ Kafka ──▶ activity-consumer ──▶ MongoDB ──▶ GET /admin/users/:id/activity
+```
+
+The pipeline is an optional compose profile, so the default `docker-compose up` stays light (Postgres + API):
+
+```bash
+docker-compose --profile activity-log up --build
+```
+
+It adds Kafka (KRaft), Kafka Connect with Debezium, MongoDB, the topic and connector setup jobs, and the consumer (`cmd/activity-consumer`). Delivery is at-least-once and the consumer is idempotent (unique `event_id`); malformed messages go to the `activity-log.events.dlq` topic. Details and the failure modes are in [06-activity-log.md](sdd/specs/modules/06-activity-log.md).
 
 ## API Reference
 
@@ -382,21 +407,31 @@ Sets the user's status back to `active`.
 GET /api/v1/admin/users/:id/activity
 ```
 
-> **Note:** This endpoint is available but returns an empty list until the activity log module is fully implemented.
+Admin only. Lists the actions the user performed, newest first, read from MongoDB.
 
-**Query params:** `page`, `limit` (same defaults as list users)
+**Query params:** `page`, `limit` (same defaults as list users), `event_type` (optional: `login`, `product_created`, `product_updated`, `product_deleted`, `cart_checkout`, `order_placed`, `order_cancelled`; anything else is a `400`)
 
 **Response `200`:**
 
 ```json
 {
-  "data": [],
-  "total": 0,
+  "data": [
+    {
+      "id": "0b6f6b0e-6c1d-4f43-9c5e-3a1d2f8c7e11",
+      "user_id": 42,
+      "event_type": "cart_checkout",
+      "metadata": { "order_id": 10, "total_price": 179.8 },
+      "occurred_at": "2026-11-28T10:30:00Z"
+    }
+  ],
+  "total": 1,
   "page": 1,
   "limit": 20,
-  "total_pages": 0
+  "total_pages": 1
 }
 ```
+
+The history is **eventually consistent** (outbox → Debezium → Kafka → MongoDB), so a very recent action may take a moment to show up. It needs the `activity-log` profile (see [Activity log pipeline](#activity-log-pipeline)); without it, or while MongoDB is down, the endpoint answers `503` and the rest of the API is unaffected.
 
 ---
 
@@ -505,4 +540,4 @@ Every push and pull request runs the [CI workflow](.github/workflows/ci.yml): `g
 | Product | Done | [03-product.md](sdd/specs/modules/03-product.md) |
 | Cart | Done | [04-cart.md](sdd/specs/modules/04-cart.md) |
 | Order | Done | [05-order.md](sdd/specs/modules/05-order.md) |
-| Activity Log | Planned | [06-activity-log.md](sdd/specs/modules/06-activity-log.md) |
+| Activity Log | Done | [06-activity-log.md](sdd/specs/modules/06-activity-log.md) |

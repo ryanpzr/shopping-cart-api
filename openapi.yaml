@@ -183,16 +183,47 @@ components:
           type: integer
           example: 5
 
+    ActivityLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: The event id
+          example: 0b6f1c2e-1111-4222-8333-444455556666
+        user_id:
+          type: integer
+          description: The user who performed the action
+          example: 42
+        event_type:
+          type: string
+          enum: [login, product_created, product_updated, product_deleted, cart_checkout, order_placed, order_cancelled]
+          example: cart_checkout
+        metadata:
+          type: object
+          description: >-
+            Depends on the event type. product_created and product_deleted: product_id, title
+            (product_deleted also seller_id); product_updated: product_id, changed_fields;
+            cart_checkout: order_id, total_price; order_placed: order_id; order_cancelled: order_id, buyer_id;
+            login: empty.
+          additionalProperties: true
+          example:
+            order_id: 10
+            total_price: 179.8
+        occurred_at:
+          type: string
+          format: date-time
+
     ActivityLogResponse:
       type: object
       properties:
         data:
           type: array
           items:
-            type: object
+            $ref: '#/components/schemas/ActivityLogEntry'
         total:
           type: integer
-          example: 0
+          example: 12
         page:
           type: integer
           example: 1
@@ -201,7 +232,7 @@ components:
           example: 20
         total_pages:
           type: integer
-          example: 0
+          example: 1
 
     # ─── Product ────────────────────────────────────────────────────────────
     Product:
@@ -960,7 +991,11 @@ paths:
   /admin/users/{id}/activity:
     get:
       tags: [Admin]
-      summary: Get activity log for a user (stub — returns empty list)
+      summary: Get the activity log of a user
+      description: >-
+        The actions the user performed, newest first. The history is written asynchronously (outbox,
+        Debezium, Kafka, MongoDB), so a very recent action may take a moment to appear. An admin who
+        cancels someone else's order or deletes someone else's product gets the event in their own history.
       security:
         - BearerAuth: []
       parameters:
@@ -980,15 +1015,21 @@ paths:
             type: integer
             default: 20
             maximum: 100
+        - name: event_type
+          in: query
+          description: Only entries of this type
+          schema:
+            type: string
+            enum: [login, product_created, product_updated, product_deleted, cart_checkout, order_placed, order_cancelled]
       responses:
         '200':
-          description: Paginated activity log
+          description: Paginated activity log (empty when the user has no history)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ActivityLogResponse'
         '400':
-          description: Invalid user ID
+          description: Invalid user ID or unknown event_type
           content:
             application/json:
               schema:
@@ -1005,6 +1046,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: The audit store (MongoDB) is down or not configured; the rest of the API is unaffected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: activity log is temporarily unavailable
 
   # Products ─────────────────────────────────────────────────────────────────
   /products:

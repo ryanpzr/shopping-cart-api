@@ -106,7 +106,7 @@ CREATE INDEX idx_outbox_events_created_at ON outbox_events(created_at);
 // pkg/outbox/outbox.go
 // Insert writes an event in the caller's transaction. It must be called
 // inside the same *sql.Tx as the business change it describes.
-func Insert(ctx context.Context, tx *sql.Tx, e Event) error
+func (w *Writer) Insert(ctx context.Context, e Event) error // Writer is bound to a database.DBTX (the tx)
 ```
 
 ```go
@@ -173,13 +173,13 @@ Indexes:
 
 | Event Type | Emitted by | Metadata fields |
 |---|---|---|
-| `login` | Auth — BR-AUTH-002 | `ip` (optional) |
+| `login` | Auth — BR-AUTH-002 (successful logins only) | none |
 | `product_created` | Product — BR-PROD-003 | `product_id`, `title` |
 | `product_updated` | Product — BR-PROD-004 | `product_id`, `changed_fields` |
-| `product_deleted` | Product — BR-PROD-006 | `product_id`, `title` |
+| `product_deleted` | Product — BR-PROD-006 | `product_id`, `title`, `seller_id` |
 | `cart_checkout` | Cart — BR-CART-005 | `order_id`, `total_price` |
 | `order_placed` | Cart — BR-CART-005 | `order_id` |
-| `order_cancelled` | Order — BR-ORDER-003 | `order_id` |
+| `order_cancelled` | Order — BR-ORDER-003, BR-ADMIN-ORDER-001 | `order_id`, `buyer_id` |
 
 ## Endpoint
 
@@ -212,28 +212,108 @@ The read endpoint is defined in `02-user` as BR-ADMIN-006 and registered under t
 ## Implementation Checklist
 
 **Infrastructure**
-- [ ] `docker-compose.yml`: Postgres with `wal_level=logical`; Kafka (KRaft mode); Kafka Connect with Debezium; MongoDB
-- [ ] Debezium connector config (`deploy/debezium/outbox-connector.json`) + registration step
-- [ ] Topic creation: `activity-log.events`, `activity-log.events.dlq`
+- [x] `docker-compose.yml`: Postgres with `wal_level=logical`; Kafka (KRaft mode); Kafka Connect with Debezium; MongoDB
+- [x] Debezium connector config (`deploy/debezium/outbox-connector.json`) + registration step
+- [x] Topic creation: `activity-log.events`, `activity-log.events.dlq`
 
 **Producer side (API)**
-- [ ] Migration SQL — create `outbox_events` table + index
-- [ ] `pkg/outbox/` — `Event`, `Insert(ctx, tx, event)`, with unit tests
-- [ ] Ensure usecases that emit events run inside a `*sql.Tx` (repositories accept a transaction)
-- [ ] Emit events: Auth login, Product create/update/delete, Cart checkout (`cart_checkout`, `order_placed`), Order cancel
-- [ ] Outbox purge job (rows older than 7 days)
+- [x] Migration SQL — create `outbox_events` table + index
+- [x] `pkg/outbox/` — `Event`, `Writer.Insert(ctx, event)`, with unit tests
+- [x] Ensure usecases that emit events run inside a `*sql.Tx` (repositories accept a transaction)
+- [x] Emit events: Auth login, Product create/update/delete, Cart checkout (`cart_checkout`, `order_placed`), Order cancel
+- [x] Outbox purge job (rows older than 7 days)
 
 **Consumer**
-- [ ] `cmd/activity-consumer/` — Kafka consumer group, decode, idempotent upsert, backoff, DLQ
-- [ ] `internal/activitylog/shared/repository.go` — MongoDB repository: `Upsert`, `FindByUser` (pagination + optional `event_type`)
-- [ ] MongoDB indexes created on startup
-- [ ] Unit tests for the handler logic (duplicate, transient error, poison message)
+- [x] `cmd/activity-consumer/` — Kafka consumer group, decode, idempotent upsert, backoff, DLQ
+- [x] `internal/activitylog/shared/repository.go` — MongoDB repository: `Upsert`, `FindByUser` (pagination + optional `event_type`)
+- [x] MongoDB indexes created on startup
+- [x] Unit tests for the handler logic (duplicate, transient error, poison message)
 
 **Read path**
-- [ ] Replace the stub in `internal/user/features/admin_activity_log/usecase.go`: `usecase struct{ repo Repository }`
-      where `Repository` is the MongoDB-backed `activitylog_shared.Repository`. Handler and routes do NOT change.
+- [x] Replace the stub in `internal/user/features/admin_activity_log/usecase.go` with the MongoDB-backed repository (handler and routes unchanged).
 
 **Verification**
-- [ ] Manual test: perform each audited action → `GET /admin/users/:id/activity` lists the events
-- [ ] Stop Kafka, perform actions (API keeps working) → start Kafka → events appear
-- [ ] Replay the topic from the beginning → no duplicates in MongoDB
+- [x] Manual test: perform each audited action → `GET /admin/users/:id/activity` lists the events
+- [x] Stop Kafka, perform actions (API keeps working) → start Kafka → events appear
+- [x] Replay the topic from the beginning → no duplicates in MongoDB
+
+---
+
+## Implementation Notes (Phase 4)
+
+### Who owns an event
+The `user_id` of an event is **whoever performed the action**. An admin who cancels someone else's order, or
+deletes someone else's product, gets the event in the admin's own history; the other party is in the metadata
+(`buyer_id`, `seller_id`). Only a successful `login` is audited, and registration emits nothing.
+
+### Wire format
+The outbox `payload` column, the Kafka message value and the MongoDB document are the same JSON:
+
+```json
+{ "event_id": "0b6f…", "user_id": 42, "event_type": "cart_checkout",
+  "metadata": { "order_id": 10, "total_price": 179.8 }, "occurred_at": "2026-11-28T10:30:00Z" }
+```
+
+The Kafka key is `aggregate_id` (the `user_id`, as text). `aggregate_type` is `user` (login), `product`
+(`product_*`), `cart` (`cart_checkout`) or `order` (`order_placed`, `order_cancelled`). The Debezium connector
+(`deploy/debezium/outbox-connector.json`) uses string converters, so the message value is the payload text as is.
+
+### Where each event is emitted
+Every event is inserted through a `pkg/outbox.Writer` bound to the transaction of the change (`database.DBTX`):
+
+| Event | Transaction |
+|---|---|
+| `login` | a single `INSERT` (atomic on its own); the login answers `500` and hands out no token if it fails |
+| `product_created`, `product_updated` | product unit of work (`internal/product/shared`); update locks the product row |
+| `product_deleted` | the `delete_product` unit of work (product row locked, orders checked, delete, event) |
+| `cart_checkout`, `order_placed` | the checkout transaction, with the order, the stock and the closed cart |
+| `order_cancelled` | `internal/order/cancellation`, shared by the buyer's cancel and the admin status change |
+
+If the event cannot be written the whole transaction rolls back and the endpoint answers `500`.
+
+### Metadata
+`product_updated.changed_fields` lists the fields present in the request (JSON names, alphabetical).
+`order_cancelled` carries `order_id` and `buyer_id`; `product_deleted` carries `product_id`, `title` and
+`seller_id`; `cart_checkout` carries `order_id` and `total_price`.
+
+### Consumer (`cmd/activity-consumer`)
+- Reads `activity-log.events` in the group `activity-log-writer`; a new group starts from the beginning of the topic.
+- Stores the entry **then** commits the offset. The store is an upsert with `$setOnInsert` on `event_id`, and a
+  duplicate key counts as success, so a redelivery is harmless.
+- A storage error is retried with exponential backoff (500 ms doubling up to 30 s) and the offset is not committed.
+- A message that cannot become an entry (not JSON, missing or malformed `event_id`, no `user_id`, unknown
+  `event_type`, no `occurred_at`) is published to `activity-log.events.dlq` with the headers `error` and
+  `source-topic`, then committed, so it never blocks its partition. If the dead-letter publish fails, the message is
+  retried like a storage error.
+- A fetch or commit error makes the process exit and restart from the last committed offset.
+- Configuration comes from environment variables (`KAFKA_BROKERS`, `KAFKA_TOPIC`, `KAFKA_DLQ_TOPIC`, `KAFKA_GROUP`,
+  `MONGO_URI`, `MONGO_DB`); `MONGO_URI` is required.
+
+### Read path
+`GET /admin/users/:id/activity` (BR-ADMIN-006) reads MongoDB through `activitylog/shared.Repository`. The API
+connects lazily and starts without MongoDB: if `MONGO_URI` is not set, or MongoDB is down, the endpoint answers
+`503` with the fixed message `activity log is temporarily unavailable` (the cause is only logged) and every other
+endpoint is unaffected.
+
+### Outbox purge
+The API deletes outbox rows older than 7 days every hour (`outbox.StartPurger`). The `DELETE` is idempotent, so
+several API instances can run it at once. Debezium ignores the delete events.
+
+### Running the pipeline
+The pipeline is an optional compose profile, so `docker compose up` stays light (Postgres and the API):
+
+```bash
+docker compose --profile activity-log up --build
+```
+
+It adds Kafka (KRaft), Kafka Connect with Debezium, MongoDB, a one-shot job that creates the topics, a one-shot job
+that registers the connector (a `PUT`, safe to repeat) and the consumer. Postgres always runs with
+`wal_level=logical`.
+
+Operational notes:
+- **Replication slot:** the connector creates the slot `activity_log_outbox`. While the profile is stopped the slot
+  keeps WAL on the Postgres volume; `docker compose down -v` removes it with the volumes.
+- **Replay:** stop the consumer, reset the group (`kafka-consumer-groups.sh --reset-offsets --to-earliest`) and start
+  it again: the unique `event_id` index absorbs everything already stored.
+- **Local development only:** MongoDB and Kafka run without authentication, and the database password is the one in
+  `docker-compose.yml`.
