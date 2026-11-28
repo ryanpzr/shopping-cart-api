@@ -14,6 +14,8 @@ import (
 	updateproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/update_product"
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared/mocks"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -41,62 +43,70 @@ func owned() *domain.Product {
 }
 
 // echo makes the repository return the product it was asked to save.
-func echo(repo *mocks.Repository) {
-	repo.On("Update", mock.Anything, mock.Anything).Return(func(_ context.Context, p domain.Product) domain.Product {
+func echo(uow *mocks.UnitOfWork) {
+	uow.Products.On("Update", mock.Anything, mock.Anything).Return(func(_ context.Context, p domain.Product) domain.Product {
 		return p
 	}, nil)
 }
 
-func TestUpdate_PartialUpdateKeepsOtherFields(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(owned(), nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
+func TestUpdate_PartialUpdateKeepsOtherFieldsAndEmitsTheEvent(t *testing.T) {
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil)
+	uow.Products.On("Update", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
 		return p.ID == 3 && p.Price == 80 && p.DiscountPercentage == 50 &&
 			p.Title == "Old" && p.Quantity == 1 && *p.Category == "Books" && *p.Description == "desc"
 	})).Return(domain.Product{ID: 3, SellerID: 7, Title: "Old", Price: 80, DiscountPercentage: 50}, nil)
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventProductUpdated, 7,
+		map[string]any{"product_id": 3, "changed_fields": []string{"discount_percentage", "price"}})).Return(nil)
 
-	resp, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7,
+	resp, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7,
 		updateproduct.UpdateRequest{Price: set(80.0), DiscountPercentage: set(50)})
 
 	require.NoError(t, err)
 	assert.Equal(t, 40.0, resp.FinalPrice)
-	repo.AssertExpectations(t)
+	assert.True(t, uow.Committed)
+	uow.Products.AssertExpectations(t)
+	uow.Outbox.AssertExpectations(t)
 }
 
-func TestUpdate_NullClearsOptionalFields(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(owned(), nil)
-	repo.On("Update", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
+func TestUpdate_ChangedFieldsAreSortedAndIncludeNulls(t *testing.T) {
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil)
+	uow.Products.On("Update", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
 		return p.Photo == nil && p.Description == nil && p.Category == nil && p.Title == "Old"
 	})).Return(domain.Product{ID: 3, Title: "Old"}, nil)
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventProductUpdated, 7,
+		map[string]any{"product_id": 3, "changed_fields": []string{"category", "description", "photo"}})).Return(nil)
 
-	resp, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7, updateproduct.UpdateRequest{
+	resp, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7, updateproduct.UpdateRequest{
 		Photo: null[string](), Description: null[string](), Category: null[string](),
 	})
 
 	require.NoError(t, err)
 	assert.Nil(t, resp.Category)
-	repo.AssertExpectations(t)
+	uow.Outbox.AssertExpectations(t)
 }
 
 func TestUpdate_ValidatesTheResultingProduct(t *testing.T) {
-	// The stored product already breaks no rule; the merged result must not either.
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(owned(), nil)
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil)
 
-	_, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7,
+	_, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7,
 		updateproduct.UpdateRequest{Category: set("books")})
 
 	assertAppError(t, err, http.StatusBadRequest)
-	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	assert.False(t, uow.Committed)
+	uow.Products.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 }
 
 func TestUpdate_AcceptsZeroQuantity(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(owned(), nil)
-	echo(repo)
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil)
+	echo(uow)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(nil)
 
-	resp, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7,
+	resp, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7,
 		updateproduct.UpdateRequest{Quantity: set(0)})
 
 	require.NoError(t, err)
@@ -106,34 +116,49 @@ func TestUpdate_AcceptsZeroQuantity(t *testing.T) {
 }
 
 func TestUpdate_NotOwner(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(owned(), nil)
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil)
 
-	_, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 8,
+	_, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 8,
 		updateproduct.UpdateRequest{Title: set("New")})
 
 	assertAppError(t, err, http.StatusForbidden)
-	repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	assert.False(t, uow.Committed)
+	uow.Products.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+	uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 }
 
 func TestUpdate_NotFound(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(nil, domain.ErrProductNotFound)
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(nil, domain.ErrProductNotFound)
 
-	_, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7,
+	_, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7,
 		updateproduct.UpdateRequest{Title: set("New")})
 
 	assertAppError(t, err, http.StatusNotFound)
 }
 
 func TestUpdate_RepositoryFailure(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("FindByID", mock.Anything, 3).Return(nil, errors.New("connection refused"))
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(nil, errors.New("connection refused"))
 
-	_, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7,
+	_, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7,
 		updateproduct.UpdateRequest{Title: set("New")})
 
 	assertAppError(t, err, http.StatusInternalServerError)
+}
+
+func TestUpdate_FailingToWriteTheEventRollsTheUpdateBack(t *testing.T) {
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil)
+	echo(uow)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(errors.New("outbox: insert event: connection reset"))
+
+	_, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7,
+		updateproduct.UpdateRequest{Title: set("New")})
+
+	assertAppError(t, err, http.StatusInternalServerError)
+	assert.False(t, uow.Committed, "the update must not be committed without its event")
 }
 
 func TestUpdate_BadRequests(t *testing.T) {
@@ -155,13 +180,15 @@ func TestUpdate_BadRequests(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := new(mocks.Repository)
-			repo.On("FindByID", mock.Anything, 3).Return(owned(), nil).Maybe()
+			uow := mocks.NewUnitOfWork()
+			uow.Products.On("LockByID", mock.Anything, 3).Return(owned(), nil).Maybe()
 
-			_, err := updateproduct.NewUsecase(repo).Update(context.Background(), 3, 7, tt.req)
+			_, err := updateproduct.NewUsecase(uow).Update(context.Background(), 3, 7, tt.req)
 
 			assertAppError(t, err, http.StatusBadRequest)
-			repo.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+			assert.False(t, uow.Committed)
+			uow.Products.AssertNotCalled(t, "Update", mock.Anything, mock.Anything)
+			uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 		})
 	}
 }

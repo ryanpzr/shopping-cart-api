@@ -15,6 +15,8 @@ import (
 	createproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/create_product"
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared/mocks"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -34,13 +36,13 @@ func assertAppError(t *testing.T, err error, code int) {
 	assert.Equal(t, code, appErr.Code)
 }
 
-func TestCreate_Success(t *testing.T) {
-	repo := new(mocks.Repository)
+func TestCreate_SuccessEmitsTheEventInTheSameTransaction(t *testing.T) {
+	uow := mocks.NewUnitOfWork()
 	req := validRequest()
 	req.DiscountPercentage = ptr(25)
 	req.Category = ptr("Electronics")
 
-	repo.On("Create", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
+	uow.Products.On("Create", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
 		return p.SellerID == 7 && p.Title == "Mechanical keyboard" && p.Price == 200 &&
 			p.DiscountPercentage == 25 && p.Quantity == 5 && p.Status == domain.StatusActive &&
 			*p.Category == "Electronics"
@@ -48,31 +50,36 @@ func TestCreate_Success(t *testing.T) {
 		ID: 1, SellerID: 7, Title: "Mechanical keyboard", Price: 200,
 		DiscountPercentage: 25, Quantity: 5, Status: domain.StatusActive, Category: ptr("Electronics"),
 	}, nil)
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventProductCreated, 7,
+		map[string]any{"product_id": 1, "title": "Mechanical keyboard"})).Return(nil)
 
-	resp, err := createproduct.NewUsecase(repo).Create(context.Background(), 7, req)
+	resp, err := createproduct.NewUsecase(uow).Create(context.Background(), 7, req)
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, resp.ID)
 	assert.Equal(t, 7, resp.SellerID)
 	assert.Equal(t, 150.0, resp.FinalPrice)
 	assert.Equal(t, domain.StatusActive, resp.Status)
-	repo.AssertExpectations(t)
+	assert.True(t, uow.Committed)
+	uow.Products.AssertExpectations(t)
+	uow.Outbox.AssertExpectations(t)
 }
 
 func TestCreate_DefaultsDiscountToZeroAndAcceptsZeroQuantity(t *testing.T) {
-	repo := new(mocks.Repository)
+	uow := mocks.NewUnitOfWork()
 	req := validRequest()
 	req.Quantity = ptr(0)
 
-	repo.On("Create", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
+	uow.Products.On("Create", mock.Anything, mock.MatchedBy(func(p domain.Product) bool {
 		return p.DiscountPercentage == 0 && p.Quantity == 0
 	})).Return(domain.Product{ID: 1, Price: 200, Status: domain.StatusActive}, nil)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(nil)
 
-	resp, err := createproduct.NewUsecase(repo).Create(context.Background(), 7, req)
+	resp, err := createproduct.NewUsecase(uow).Create(context.Background(), 7, req)
 
 	require.NoError(t, err)
 	assert.Equal(t, 200.0, resp.FinalPrice)
-	repo.AssertExpectations(t)
+	uow.Products.AssertExpectations(t)
 }
 
 func TestCreate_ValidationErrors(t *testing.T) {
@@ -95,24 +102,41 @@ func TestCreate_ValidationErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := new(mocks.Repository)
+			uow := mocks.NewUnitOfWork()
 			req := validRequest()
 			tt.modify(&req)
 
-			_, err := createproduct.NewUsecase(repo).Create(context.Background(), 7, req)
+			_, err := createproduct.NewUsecase(uow).Create(context.Background(), 7, req)
 
 			assertAppError(t, err, http.StatusBadRequest)
-			repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+			uow.Products.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+			uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 		})
 	}
 }
 
 func TestCreate_RepositoryError(t *testing.T) {
-	repo := new(mocks.Repository)
-	repo.On("Create", mock.Anything, mock.Anything).
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("Create", mock.Anything, mock.Anything).
 		Return(domain.Product{}, errors.New("connection refused"))
 
-	_, err := createproduct.NewUsecase(repo).Create(context.Background(), 7, validRequest())
+	_, err := createproduct.NewUsecase(uow).Create(context.Background(), 7, validRequest())
 
 	assertAppError(t, err, http.StatusInternalServerError)
+	assert.False(t, uow.Committed)
+	uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
+}
+
+func TestCreate_FailingToWriteTheEventRollsTheProductBack(t *testing.T) {
+	// An action without its audit event is not allowed: the whole transaction
+	// fails and the client gets a 500.
+	uow := mocks.NewUnitOfWork()
+	uow.Products.On("Create", mock.Anything, mock.Anything).
+		Return(domain.Product{ID: 1, Title: "Mechanical keyboard", Price: 200, Status: domain.StatusActive}, nil)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(errors.New("outbox: insert event: connection reset"))
+
+	_, err := createproduct.NewUsecase(uow).Create(context.Background(), 7, validRequest())
+
+	assertAppError(t, err, http.StatusInternalServerError)
+	assert.False(t, uow.Committed, "the product must not be committed without its event")
 }

@@ -7,13 +7,15 @@ import (
 	ordershared "github.com/ryanpzr/shopping-cart-api/internal/order/shared"
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
 	"github.com/ryanpzr/shopping-cart-api/pkg/database"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 type unitOfWork struct {
 	db *sql.DB
 }
 
-// NewUnitOfWork binds the product and order repositories to one transaction.
+// NewUnitOfWork binds the product and order repositories and the outbox writer
+// to one transaction.
 // It lives in the feature because the order module already depends on the
 // product repository, so the product package cannot depend on the order one.
 func NewUnitOfWork(db *sql.DB) UnitOfWork {
@@ -25,6 +27,7 @@ func (u *unitOfWork) Do(ctx context.Context, fn func(repos TxRepositories) error
 		return fn(TxRepositories{
 			Products: shared.NewRepository(tx),
 			Orders:   ordershared.NewRepository(tx),
+			Outbox:   outbox.NewWriter(tx),
 		})
 	})
 }

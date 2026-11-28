@@ -42,8 +42,30 @@ type UpdateRequest struct {
 }
 
 func (r UpdateRequest) isEmpty() bool {
-	return !r.Photo.Set && !r.Title.Set && !r.Description.Set && !r.Price.Set &&
-		!r.DiscountPercentage.Set && !r.Quantity.Set && !r.Category.Set
+	return len(r.changedFields()) == 0
+}
+
+// changedFields lists the JSON names of the fields present in the request, in
+// alphabetical order. It is the changed_fields metadata of the audit event.
+func (r UpdateRequest) changedFields() []string {
+	fields := []string{}
+	for _, f := range []struct {
+		name string
+		set  bool
+	}{
+		{"category", r.Category.Set},
+		{"description", r.Description.Set},
+		{"discount_percentage", r.DiscountPercentage.Set},
+		{"photo", r.Photo.Set},
+		{"price", r.Price.Set},
+		{"quantity", r.Quantity.Set},
+		{"title", r.Title.Set},
+	} {
+		if f.set {
+			fields = append(fields, f.name)
+		}
+	}
+	return fields
 }
 
 type ProductResponse struct {

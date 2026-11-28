@@ -6,14 +6,15 @@ import (
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 type usecase struct {
-	repo Repository
+	uow UnitOfWork
 }
 
-func NewUsecase(repo Repository) Usecase {
-	return &usecase{repo: repo}
+func NewUsecase(uow UnitOfWork) Usecase {
+	return &usecase{uow: uow}
 }
 
 func (u *usecase) Create(ctx context.Context, sellerID int, req CreateRequest) (ProductResponse, error) {
@@ -44,12 +45,22 @@ func (u *usecase) Create(ctx context.Context, sellerID int, req CreateRequest) (
 		return ProductResponse{}, toAppError(err)
 	}
 
-	created, err := u.repo.Create(ctx, product)
+	var created domain.Product
+	err := u.uow.Do(ctx, func(r TxRepositories) error {
+		var err error
+		created, err = r.Products.Create(ctx, product)
+		if err != nil {
+			return err
+		}
+		// The audit event is committed with the product, or not at all.
+		return r.Outbox.Insert(ctx, outbox.New(sellerID, outbox.EventProductCreated, map[string]any{
+			"product_id": created.ID,
+			"title":      created.Title,
+		}))
+	})
 	if err != nil {
 		return ProductResponse{}, toAppError(err)
 	}
-
-	// TODO(module-06): emit `product_created` through the outbox, in the same transaction.
 
 	return toResponse(created), nil
 }

@@ -35,6 +35,7 @@ import (
 	getme "github.com/ryanpzr/shopping-cart-api/internal/user/features/get_me"
 	updateme "github.com/ryanpzr/shopping-cart-api/internal/user/features/update_me"
 	usershared "github.com/ryanpzr/shopping-cart-api/internal/user/shared"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 func Setup(api *gin.RouterGroup, conn *sql.DB) {
@@ -43,17 +44,19 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 
 	// Auth features
 	usRegister := register.NewUsecase(rpUser)
-	usLogin := login.NewUsecase(rpUser)
+	usLogin := login.NewUsecase(rpUser, outbox.NewWriter(conn))
 	hdRegister := register.NewHandler(usRegister)
 	hdLogin := login.NewHandler(usLogin)
 
 	// Product features
 	rpProduct := productshared.NewRepository(conn)
+	// Create and update write the product and its audit event in one transaction.
+	productUow := productshared.NewUnitOfWork(conn)
 	hdProducts := product.ProductHandlers{
 		List:   listproducts.NewHandler(listproducts.NewUsecase(rpProduct)),
 		Get:    getproduct.NewHandler(getproduct.NewUsecase(rpProduct)),
-		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
-		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
+		Create: createproduct.NewHandler(createproduct.NewUsecase(productUow)),
+		Update: updateproduct.NewHandler(updateproduct.NewUsecase(productUow)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
 		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(deleteproduct.NewUnitOfWork(conn))),
 	}

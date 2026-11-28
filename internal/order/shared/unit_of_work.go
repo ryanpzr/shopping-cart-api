@@ -6,12 +6,16 @@ import (
 
 	productshared "github.com/ryanpzr/shopping-cart-api/internal/product/shared"
 	"github.com/ryanpzr/shopping-cart-api/pkg/database"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
-// TxRepositories are repositories bound to the same transaction.
+// TxRepositories are repositories bound to the same transaction. The outbox
+// writer is bound to it too, so an audit event is committed with the change it
+// describes, or not at all.
 type TxRepositories struct {
 	Orders   Repository
 	Products productshared.Repository
+	Outbox   outbox.Writer
 }
 
 // UnitOfWork runs fn inside one transaction: it commits when fn returns nil
@@ -34,6 +38,7 @@ func (u *unitOfWork) Do(ctx context.Context, fn func(repos TxRepositories) error
 		return fn(TxRepositories{
 			Orders:   NewRepository(tx),
 			Products: productshared.NewRepository(tx),
+			Outbox:   outbox.NewWriter(tx),
 		})
 	})
 }

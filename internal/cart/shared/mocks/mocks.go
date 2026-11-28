@@ -11,6 +11,7 @@ import (
 	"github.com/ryanpzr/shopping-cart-api/internal/cart/shared"
 	ordermocks "github.com/ryanpzr/shopping-cart-api/internal/order/shared/mocks"
 	productmocks "github.com/ryanpzr/shopping-cart-api/internal/product/shared/mocks"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 type Repository struct{ mock.Mock }
@@ -59,6 +60,7 @@ type UnitOfWork struct {
 	Carts     *Repository
 	Products  *productmocks.Repository
 	Orders    *ordermocks.Repository
+	Outbox    *outboxmocks.Writer
 	Committed bool
 }
 
@@ -67,11 +69,12 @@ func NewUnitOfWork() *UnitOfWork {
 		Carts:    new(Repository),
 		Products: new(productmocks.Repository),
 		Orders:   new(ordermocks.Repository),
+		Outbox:   new(outboxmocks.Writer),
 	}
 }
 
 func (u *UnitOfWork) Do(_ context.Context, fn func(repos shared.TxRepositories) error) error {
-	err := fn(shared.TxRepositories{Carts: u.Carts, Products: u.Products, Orders: u.Orders})
+	err := fn(shared.TxRepositories{Carts: u.Carts, Products: u.Products, Orders: u.Orders, Outbox: u.Outbox})
 	u.Committed = err == nil
 	return err
 }

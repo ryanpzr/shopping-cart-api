@@ -6,6 +6,7 @@ import (
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 const roleAdmin = "admin"
@@ -41,9 +42,17 @@ func (u *usecase) Delete(ctx context.Context, productID, userID int, role string
 			return apperrors.NewConflict("product has active orders and cannot be deleted")
 		}
 
-		// TODO(module-06): emit `product_deleted` through the outbox, in this transaction.
+		if err := r.Products.Delete(ctx, productID); err != nil {
+			return err
+		}
 
-		return r.Products.Delete(ctx, productID)
+		// The event belongs to whoever deleted the product (the owner or an
+		// admin) and is committed with the delete, or not at all.
+		return r.Outbox.Insert(ctx, outbox.New(userID, outbox.EventProductDeleted, map[string]any{
+			"product_id": productID,
+			"title":      p.Title,
+			"seller_id":  p.SellerID,
+		}))
 	})
 	if err != nil {
 		return toAppError(err)

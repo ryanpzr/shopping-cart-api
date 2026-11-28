@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
 )
 
 type Usecase interface {
@@ -20,6 +21,7 @@ type OrderChecker interface {
 type TxRepositories struct {
 	Products shared.Repository
 	Orders   OrderChecker
+	Outbox   outbox.Writer
 }
 
 // UnitOfWork runs fn inside one transaction: it commits when fn returns nil

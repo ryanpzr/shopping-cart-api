@@ -22,7 +22,7 @@ func NewUsecase(uow UnitOfWork) Usecase {
 // order, which gives the stock back like the buyer's cancellation. Any other
 // change is a conflict. The order row is locked, so concurrent changes run
 // one after the other.
-func (u *usecase) UpdateStatus(ctx context.Context, orderID int, req UpdateStatusRequest) (OrderResponse, error) {
+func (u *usecase) UpdateStatus(ctx context.Context, orderID, actorID int, req UpdateStatusRequest) (OrderResponse, error) {
 	if req.Status == nil {
 		return OrderResponse{}, apperrors.NewBadRequest("status is required")
 	}
@@ -39,15 +39,13 @@ func (u *usecase) UpdateStatus(ctx context.Context, orderID int, req UpdateStatu
 		}
 
 		if target == domain.StatusCancelled {
-			err = cancellation.Cancel(ctx, r, order)
+			err = cancellation.Cancel(ctx, r, order, actorID)
 		} else if err = domain.CheckTransition(order.Status, target); err == nil {
 			err = r.Orders.UpdateStatus(ctx, orderID, target)
 		}
 		if err != nil {
 			return err
 		}
-
-		// TODO(module-06): emit `order_cancelled` through the outbox when target is cancelled.
 
 		result, err = r.Orders.FindByID(ctx, orderID)
 		return err

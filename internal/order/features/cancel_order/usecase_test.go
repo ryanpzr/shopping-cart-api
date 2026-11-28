@@ -15,6 +15,8 @@ import (
 	ordermocks "github.com/ryanpzr/shopping-cart-api/internal/order/shared/mocks"
 	productdomain "github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 const (
@@ -43,6 +45,8 @@ func TestCancel_OwnerCancelsPendingOrderAndStockReturns(t *testing.T) {
 	uow.Products.On("UpdateStock", mock.Anything, 9, 5).Return(nil)
 	uow.Orders.On("UpdateStatus", mock.Anything, orderID, domain.StatusCancelled).Return(nil)
 	uow.Orders.On("FindByID", mock.Anything, orderID).Return(order(domain.StatusCancelled), nil)
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventOrderCancelled, owner,
+		map[string]any{"order_id": orderID, "buyer_id": owner})).Return(nil)
 
 	resp, err := cancelorder.NewUsecase(uow).Cancel(context.Background(), orderID, owner)
 
@@ -51,6 +55,7 @@ func TestCancel_OwnerCancelsPendingOrderAndStockReturns(t *testing.T) {
 	assert.True(t, uow.Committed)
 	uow.Products.AssertExpectations(t)
 	uow.Orders.AssertExpectations(t)
+	uow.Outbox.AssertExpectations(t)
 }
 
 func TestCancel_OnlyPendingOrdersAreCancellable(t *testing.T) {
@@ -64,6 +69,7 @@ func TestCancel_OnlyPendingOrdersAreCancellable(t *testing.T) {
 			assertAppError(t, err, http.StatusConflict)
 			assert.False(t, uow.Committed)
 			uow.Products.AssertNotCalled(t, "UpdateStock", mock.Anything, mock.Anything, mock.Anything)
+			uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 		})
 	}
 }

@@ -15,6 +15,8 @@ import (
 	deleteproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/delete_product"
 	"github.com/ryanpzr/shopping-cart-api/internal/product/shared/mocks"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 // fakeUnitOfWork runs fn with mocks and records whether it would have
@@ -22,15 +24,16 @@ import (
 type fakeUnitOfWork struct {
 	Products  *mocks.Repository
 	Orders    *ordermocks.Repository
+	Outbox    *outboxmocks.Writer
 	Committed bool
 }
 
 func newUnitOfWork() *fakeUnitOfWork {
-	return &fakeUnitOfWork{Products: new(mocks.Repository), Orders: new(ordermocks.Repository)}
+	return &fakeUnitOfWork{Products: new(mocks.Repository), Orders: new(ordermocks.Repository), Outbox: new(outboxmocks.Writer)}
 }
 
 func (u *fakeUnitOfWork) Do(_ context.Context, fn func(repos deleteproduct.TxRepositories) error) error {
-	err := fn(deleteproduct.TxRepositories{Products: u.Products, Orders: u.Orders})
+	err := fn(deleteproduct.TxRepositories{Products: u.Products, Orders: u.Orders, Outbox: u.Outbox})
 	u.Committed = err == nil
 	return err
 }
@@ -59,6 +62,8 @@ func TestDelete_Allowed(t *testing.T) {
 			uow.Products.On("LockByID", mock.Anything, 3).Return(product, nil)
 			uow.Orders.On("HasOrdersWithStatus", mock.Anything, 3, domain.ActiveOrderStatuses).Return(false, nil)
 			uow.Products.On("Delete", mock.Anything, 3).Return(nil)
+			uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventProductDeleted, tt.userID,
+				map[string]any{"product_id": 3, "title": "Desk", "seller_id": 7})).Return(nil)
 
 			err := deleteproduct.NewUsecase(uow).Delete(context.Background(), 3, tt.userID, tt.role)
 
@@ -78,10 +83,11 @@ func TestDelete_LocksTheProductBeforeLookingAtOrders(t *testing.T) {
 	uow.Products.On("LockByID", mock.Anything, 3).Run(func(mock.Arguments) { calls = append(calls, "lock") }).Return(product, nil)
 	uow.Orders.On("HasOrdersWithStatus", mock.Anything, 3, mock.Anything).Run(func(mock.Arguments) { calls = append(calls, "check") }).Return(false, nil)
 	uow.Products.On("Delete", mock.Anything, 3).Run(func(mock.Arguments) { calls = append(calls, "delete") }).Return(nil)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Run(func(mock.Arguments) { calls = append(calls, "event") }).Return(nil)
 
 	require.NoError(t, deleteproduct.NewUsecase(uow).Delete(context.Background(), 3, 7, "client"))
 
-	assert.Equal(t, []string{"lock", "check", "delete"}, calls)
+	assert.Equal(t, []string{"lock", "check", "delete", "event"}, calls)
 }
 
 func TestDelete_NonOwnerClient(t *testing.T) {
@@ -141,4 +147,28 @@ func TestDelete_OrderCheckFails(t *testing.T) {
 	assertAppError(t, err, http.StatusInternalServerError)
 	assert.False(t, uow.Committed)
 	uow.Products.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
+}
+
+func TestDelete_FailingToWriteTheEventRollsTheDeleteBack(t *testing.T) {
+	uow := newUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(product, nil)
+	uow.Orders.On("HasOrdersWithStatus", mock.Anything, 3, mock.Anything).Return(false, nil)
+	uow.Products.On("Delete", mock.Anything, 3).Return(nil)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(errors.New("outbox: insert event: connection reset"))
+
+	err := deleteproduct.NewUsecase(uow).Delete(context.Background(), 3, 7, "client")
+
+	assertAppError(t, err, http.StatusInternalServerError)
+	assert.False(t, uow.Committed, "the delete must not be committed without its event")
+}
+
+func TestDelete_RefusedDeletesEmitNoEvent(t *testing.T) {
+	uow := newUnitOfWork()
+	uow.Products.On("LockByID", mock.Anything, 3).Return(product, nil)
+	uow.Orders.On("HasOrdersWithStatus", mock.Anything, 3, mock.Anything).Return(true, nil)
+
+	err := deleteproduct.NewUsecase(uow).Delete(context.Background(), 3, 7, "client")
+
+	assertAppError(t, err, http.StatusConflict)
+	uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 }

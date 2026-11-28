@@ -18,6 +18,8 @@ import (
 	productdomain "github.com/ryanpzr/shopping-cart-api/internal/product/domain"
 	"github.com/ryanpzr/shopping-cart-api/pkg/apperrors"
 	"github.com/ryanpzr/shopping-cart-api/pkg/money"
+	"github.com/ryanpzr/shopping-cart-api/pkg/outbox"
+	outboxmocks "github.com/ryanpzr/shopping-cart-api/pkg/outbox/mocks"
 )
 
 const buyer = 7
@@ -65,6 +67,10 @@ func TestCheckout_PlacesOrder(t *testing.T) {
 		return o
 	}, nil)
 	uow.Carts.On("UpdateStatus", mock.Anything, 10, domain.StatusCheckedOut).Return(nil)
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventCartCheckout, buyer,
+		map[string]any{"order_id": 55, "total_price": money.FromCents(38484)})).Return(nil)
+	uow.Outbox.On("Insert", mock.Anything, outboxmocks.Matches(outbox.EventOrderPlaced, buyer,
+		map[string]any{"order_id": 55})).Return(nil)
 
 	resp, err := checkout.NewUsecase(uow).Checkout(context.Background(), buyer)
 
@@ -77,6 +83,7 @@ func TestCheckout_PlacesOrder(t *testing.T) {
 	uow.Products.AssertExpectations(t)
 	uow.Orders.AssertExpectations(t)
 	uow.Carts.AssertExpectations(t)
+	uow.Outbox.AssertExpectations(t)
 }
 
 func TestCheckout_EmptyOrMissingCart(t *testing.T) {
@@ -167,4 +174,32 @@ func TestCheckout_RepositoryFailureRollsBack(t *testing.T) {
 	assertAppError(t, err, http.StatusInternalServerError)
 	assert.False(t, uow.Committed)
 	uow.Carts.AssertNotCalled(t, "UpdateStatus", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestCheckout_FailingToWriteAnEventRollsTheOrderBack(t *testing.T) {
+	// Neither the order, nor the stock change, nor the closed cart may be
+	// committed without the audit events.
+	uow := setup(cart(), products())
+	uow.Products.On("UpdateStock", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	uow.Orders.On("Create", mock.Anything, mock.Anything).Return(orderdomain.Order{ID: 55, TotalPrice: money.FromCents(38484)}, nil)
+	uow.Outbox.On("Insert", mock.Anything, mock.Anything).Return(errors.New("outbox: insert event: connection reset"))
+
+	_, err := checkout.NewUsecase(uow).Checkout(context.Background(), buyer)
+
+	assertAppError(t, err, http.StatusInternalServerError)
+	assert.False(t, uow.Committed)
+	uow.Carts.AssertNotCalled(t, "UpdateStatus", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestCheckout_NoEventsWhenNothingIsPlaced(t *testing.T) {
+	// A price change refreshes the snapshots but places no order: nothing to audit.
+	ps := products()
+	ps[0].DiscountPercentage = 10
+	uow := setup(cart(), ps)
+	uow.Carts.On("UpdateItem", mock.Anything, mock.Anything).Return(nil)
+
+	_, err := checkout.NewUsecase(uow).Checkout(context.Background(), buyer)
+
+	assertAppError(t, err, http.StatusConflict)
+	uow.Outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
 }

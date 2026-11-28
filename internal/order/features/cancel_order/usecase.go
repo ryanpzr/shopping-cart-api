@@ -32,11 +32,9 @@ func (u *usecase) Cancel(ctx context.Context, orderID, userID int) (OrderRespons
 			return apperrors.NewForbidden("you are not the owner of this order")
 		}
 
-		if err := cancellation.Cancel(ctx, r, order); err != nil {
+		if err := cancellation.Cancel(ctx, r, order, userID); err != nil {
 			return err
 		}
-
-		// TODO(module-06): emit `order_cancelled` through the outbox, in this transaction.
 
 		result, err = r.Orders.FindByID(ctx, orderID)
 		return err
