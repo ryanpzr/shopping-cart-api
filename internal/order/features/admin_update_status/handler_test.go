@@ -51,6 +51,8 @@ func TestUpdateStatusHandler_BadInput(t *testing.T) {
 		"/admin/orders/0/status":   `{"status":"paid"}`,
 		"/admin/orders/55/status":  `{`,
 	}
+	// A status that is not a string never reaches the usecase.
+	cases["/admin/orders/56/status"] = `{"status":5}`
 	for path, body := range cases {
 		uc := new(mockUsecase)
 		assert.Equal(t, http.StatusBadRequest, patch(uc, path, body).Code, path+" "+body)

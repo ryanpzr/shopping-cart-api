@@ -49,6 +49,8 @@ func TestUpdateStatus_AllowedSteps(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, step[1], resp.Status)
 			assert.True(t, uow.Committed)
+			// Moving forward never touches the products: no lock, no stock change.
+			uow.Products.AssertNotCalled(t, "LockByIDs", mock.Anything, mock.Anything)
 			uow.Products.AssertNotCalled(t, "UpdateStock", mock.Anything, mock.Anything, mock.Anything)
 		})
 	}

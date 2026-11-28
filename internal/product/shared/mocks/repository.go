@@ -66,10 +66,3 @@ func (m *Repository) LockByIDs(ctx context.Context, ids []int) ([]domain.Product
 func (m *Repository) UpdateStock(ctx context.Context, id, quantity int) error {
 	return m.Called(ctx, id, quantity).Error(0)
 }
-
-type OrderChecker struct{ mock.Mock }
-
-func (m *OrderChecker) HasOrdersWithStatus(ctx context.Context, productID int, statuses []string) (bool, error) {
-	args := m.Called(ctx, productID, statuses)
-	return args.Bool(0), args.Error(1)
-}

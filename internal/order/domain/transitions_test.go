@@ -39,10 +39,10 @@ func TestUnknownStatusesNeverTransition(t *testing.T) {
 	assert.False(t, domain.CanTransition(domain.StatusPending, "refunded"))
 }
 
-func TestIsCancellable(t *testing.T) {
-	assert.True(t, domain.Order{Status: domain.StatusPending}.IsCancellable())
+func TestOnlyPendingCanBeCancelled(t *testing.T) {
+	assert.True(t, domain.CanTransition(domain.StatusPending, domain.StatusCancelled))
 	for _, s := range []string{domain.StatusPaid, domain.StatusShipped, domain.StatusDelivered, domain.StatusCancelled} {
-		assert.False(t, domain.Order{Status: s}.IsCancellable(), s)
+		assert.False(t, domain.CanTransition(s, domain.StatusCancelled), s)
 	}
 }
 

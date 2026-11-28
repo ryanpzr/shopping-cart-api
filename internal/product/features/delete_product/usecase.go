@@ -19,8 +19,8 @@ func NewUsecase(uow UnitOfWork) Usecase {
 }
 
 // Delete implements BR-PROD-006. Everything runs in one transaction with the
-// product row locked: checkout and order cancellation lock the same row, so no
-// order can be placed for the product between the check and the delete.
+// product row locked: checkout also locks the product row (after the cart), so
+// no order can be placed for the product between the check and the delete.
 func (u *usecase) Delete(ctx context.Context, productID, userID int, role string) error {
 	err := u.uow.Do(ctx, func(r TxRepositories) error {
 		p, err := r.Products.LockByID(ctx, productID)

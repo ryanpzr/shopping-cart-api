@@ -85,7 +85,7 @@ Every response of an order has `id`, `cart_id`, `status`, `total_price`, `create
 **BR-ORDER-001 — List own orders**
 - Returns orders where `buyer_id = current_user_id`, ordered by `created_at DESC` (then `id DESC`)
 - Includes order items in response (loaded with one query for the whole page)
-- Pagination: `limit` (default 20, capped at 100) and `offset` (default 0); response has `data` and `meta { total, limit, offset }`; an invalid query value → `ErrBadRequest` (400)
+- Pagination: `limit` (default 20, capped at 100) and `offset` (default 0); response has `data` and `meta { total, limit, offset }`; an invalid query value → `ErrBadRequest` (400). `total` is counted by a separate query, so a checkout of the same buyer landing between the two can leave it one behind the page; a window count (`COUNT(*) OVER()`) was rejected because it loses the total when `offset` is past the last page
 
 **BR-ORDER-002 — Get order by ID**
 - `ErrNotFound` (404) if the order does not exist (for everyone, before any ownership check)
@@ -136,8 +136,8 @@ is in orders with `domain.ActiveOrderStatuses` (`pending`, `paid`, `shipped`).
 above (`order_items.product_id`, `order_items.order_id`, `orders.status`).
 
 **Delete is transactional (Phase 3).** The delete usecase runs in one transaction: it locks the product
-row (`SELECT … FOR UPDATE`), checks ownership, checks the orders and deletes. Checkout and cancellation
-lock the same row first, so no order can be placed for the product between the check and the delete: a
+row (`SELECT … FOR UPDATE`), checks ownership, checks the orders and deletes. Checkout also locks the
+product row (after the cart), so no order can be placed for the product between the check and the delete: a
 concurrent checkout and delete end as (checkout `201`, delete `409`) or (checkout `409`, delete `200`),
 never a `500`. The unit of work lives in the `delete_product` feature, because the order module already
 depends on the product repository.
