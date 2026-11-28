@@ -37,6 +37,9 @@ type Repository interface {
 	Update(ctx context.Context, p domain.Product) (domain.Product, error)
 	UpdateStatus(ctx context.Context, id int, status string) error
 	Delete(ctx context.Context, id int) error
+	// LockByID is FindByID with the product row locked (SELECT … FOR UPDATE).
+	// It must run inside a transaction.
+	LockByID(ctx context.Context, id int) (*domain.Product, error)
 	// LockByIDs loads the products with SELECT … FOR UPDATE. It must run
 	// inside a transaction; missing ids are simply absent from the result.
 	LockByIDs(ctx context.Context, ids []int) ([]domain.Product, error)
@@ -136,7 +139,15 @@ func (r *repository) FindAll(ctx context.Context, filters ProductFilters, limit,
 }
 
 func (r *repository) FindByID(ctx context.Context, id int) (*domain.Product, error) {
-	p, err := scanProduct(r.db.QueryRowContext(ctx, queryFindByID, id))
+	return r.findByID(ctx, queryFindByID, id)
+}
+
+func (r *repository) LockByID(ctx context.Context, id int) (*domain.Product, error) {
+	return r.findByID(ctx, queryLockByID, id)
+}
+
+func (r *repository) findByID(ctx context.Context, query string, id int) (*domain.Product, error) {
+	p, err := scanProduct(r.db.QueryRowContext(ctx, query, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrProductNotFound
 	}

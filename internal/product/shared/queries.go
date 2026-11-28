@@ -48,6 +48,10 @@ const (
 		FOR UPDATE
 	`
 
+	// Locks one product. Delete locks it first; checkout and cancellation lock it
+	// after their cart or order, always in id order, so they run one after the other.
+	queryLockByID = queryFindByID + ` FOR UPDATE`
+
 	queryUpdateStock = `
 		UPDATE products
 		SET quantity = $1, updated_at = NOW()

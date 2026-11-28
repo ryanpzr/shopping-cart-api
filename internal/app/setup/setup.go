@@ -14,6 +14,11 @@ import (
 	getcart "github.com/ryanpzr/shopping-cart-api/internal/cart/features/get_cart"
 	removeitem "github.com/ryanpzr/shopping-cart-api/internal/cart/features/remove_item"
 	cartshared "github.com/ryanpzr/shopping-cart-api/internal/cart/shared"
+	"github.com/ryanpzr/shopping-cart-api/internal/order"
+	adminupdatestatus "github.com/ryanpzr/shopping-cart-api/internal/order/features/admin_update_status"
+	cancelorder "github.com/ryanpzr/shopping-cart-api/internal/order/features/cancel_order"
+	getorder "github.com/ryanpzr/shopping-cart-api/internal/order/features/get_order"
+	listorders "github.com/ryanpzr/shopping-cart-api/internal/order/features/list_orders"
 	ordershared "github.com/ryanpzr/shopping-cart-api/internal/order/shared"
 	"github.com/ryanpzr/shopping-cart-api/internal/product"
 	createproduct "github.com/ryanpzr/shopping-cart-api/internal/product/features/create_product"
@@ -50,7 +55,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		Create: createproduct.NewHandler(createproduct.NewUsecase(rpProduct)),
 		Update: updateproduct.NewHandler(updateproduct.NewUsecase(rpProduct)),
 		Toggle: togglestatus.NewHandler(togglestatus.NewUsecase(rpProduct)),
-		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(rpProduct, ordershared.NewRepository(conn))),
+		Delete: deleteproduct.NewHandler(deleteproduct.NewUsecase(deleteproduct.NewUnitOfWork(conn))),
 	}
 
 	// Cart features: mutations and checkout run through a unit of work, so
@@ -63,6 +68,17 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		ChangeQuantity: changeitemquantity.NewHandler(changeitemquantity.NewUsecase(uow)),
 		RemoveItem:     removeitem.NewHandler(removeitem.NewUsecase(uow)),
 		Checkout:       checkout.NewHandler(checkout.NewUsecase(uow)),
+	}
+
+	// Order features: cancellation and status changes run through a unit of work,
+	// so the order and the stock it gives back share one transaction.
+	rpOrder := ordershared.NewRepository(conn)
+	orderUow := ordershared.NewUnitOfWork(conn)
+	hdOrders := order.OrderHandlers{
+		List:        listorders.NewHandler(listorders.NewUsecase(rpOrder)),
+		Get:         getorder.NewHandler(getorder.NewUsecase(rpOrder)),
+		Cancel:      cancelorder.NewHandler(cancelorder.NewUsecase(orderUow)),
+		AdminStatus: adminupdatestatus.NewHandler(adminupdatestatus.NewUsecase(orderUow)),
 	}
 
 	// User features — client
@@ -80,6 +96,7 @@ func Setup(api *gin.RouterGroup, conn *sql.DB) {
 		hdRegister, hdLogin,
 		hdProducts,
 		hdCart,
+		hdOrders,
 		hdGetMe, hdUpdateMe,
 		hdAdminList, hdAdminGet, hdManage, hdActivity,
 	)

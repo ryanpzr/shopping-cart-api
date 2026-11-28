@@ -6,6 +6,7 @@ import (
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/login"
 	"github.com/ryanpzr/shopping-cart-api/internal/auth/features/register"
 	"github.com/ryanpzr/shopping-cart-api/internal/cart"
+	"github.com/ryanpzr/shopping-cart-api/internal/order"
 	"github.com/ryanpzr/shopping-cart-api/internal/product"
 	"github.com/ryanpzr/shopping-cart-api/internal/user"
 	adminactivitylog "github.com/ryanpzr/shopping-cart-api/internal/user/features/admin_activity_log"
@@ -23,6 +24,7 @@ func RegisterRoutes(
 	hdLogin login.Handler,
 	hdProducts product.ProductHandlers,
 	hdCart cart.CartHandlers,
+	hdOrders order.OrderHandlers,
 	hdGetMe getme.Handler,
 	hdUpdateMe updateme.Handler,
 	hdAdminList adminlistusers.Handler,
@@ -45,9 +47,11 @@ func RegisterRoutes(
 	protected.Use(middleware.Auth())
 	user.MapClientRoutes(protected.Group("/users"), hdGetMe, hdUpdateMe)
 	cart.MapRouters(protected.Group("/carts/me"), hdCart)
+	order.MapClientRoutes(protected.Group("/orders"), hdOrders)
 
 	// Admin only
 	adminProtected := api.Group("")
 	adminProtected.Use(middleware.Auth(), middleware.RequireRole("admin"))
 	user.MapAdminRoutes(adminProtected.Group("/admin/users"), hdAdminList, hdAdminGet, hdManage, hdActivity)
+	order.MapAdminRoutes(adminProtected.Group("/admin/orders"), hdOrders)
 }
